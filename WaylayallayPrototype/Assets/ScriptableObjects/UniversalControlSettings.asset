@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInternal: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31c1ee485d1beff4cb8dce1dcab54f64, type: 3}
+  m_Name: UniversalControlSettings
+  m_EditorClassIdentifier: 
+  m_walkableLayer:
+    serializedVersion: 2
+    m_Bits: 2560
+  m_maxStepHeight: 1.16
+  m_minimumStepDepth: 0.8
+  m_stepLookahead: 1.78
+  m_jumpGracePeriod: 0.3
+  m_testVal: 0
