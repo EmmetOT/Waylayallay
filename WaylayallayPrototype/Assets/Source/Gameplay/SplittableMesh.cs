@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Simplex;
 using Sone;
+using UnibusEvent;
 
 [RequireComponent(typeof(MeshFilter))]
 [RequireComponent(typeof(MeshRenderer))]
@@ -49,9 +50,16 @@ public class SplittableMesh : MonoBehaviour
 
         m_stretcher = new MeshStretcher(MeshFilter, Manager.PlaneController.BisectionPlane);
 
-        this.BindUntilDestroy(Sone.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
-        this.BindUntilDestroy<float>(Sone.Event.SetSplittableMeshStretching, UpdateMeshStretching);
-        this.BindUntilDestroy<Controls.Code>(Sone.Event.OnCodeDown, OnCodeDown);
+        Unibus.Subscribe(Sone.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
+        Unibus.Subscribe<float>(Sone.Event.SetSplittableMeshStretching, UpdateMeshStretching);
+        Unibus.Subscribe<Controls.Code>(Sone.Event.OnCodeDown, OnCodeDown);
+    }
+
+    private void OnDestroy()
+    {
+        Unibus.Unsubscribe(Sone.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
+        Unibus.Unsubscribe<float>(Sone.Event.SetSplittableMeshStretching, UpdateMeshStretching);
+        Unibus.Unsubscribe<Controls.Code>(Sone.Event.OnCodeDown, OnCodeDown);
     }
 
     private void LateUpdate()
@@ -74,7 +82,7 @@ public class SplittableMesh : MonoBehaviour
 
     private void UpdateMeshStretching(float stretch)
     {
-        m_stretcher.SetStretch(stretch);
+        m_stretcher.SetStretch(stretch, gameObject);
     }
 
     private void OnDrawGizmosSelected()

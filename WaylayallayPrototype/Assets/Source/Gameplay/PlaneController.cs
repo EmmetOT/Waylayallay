@@ -49,7 +49,14 @@ public class PlaneController : Singleton<PlaneController>
             return m_transform;
         }
     }
-    
+
+    protected override void Awake()
+    {
+        base.Awake();
+
+        Unibus.Subscribe<Controls.Code>(Sone.Event.OnCodeDown, OnCodeDown);
+    }
+
     private void OnDrawGizmos()
     {
         if (m_drawPlaneGizmo)
@@ -60,11 +67,6 @@ public class PlaneController : Singleton<PlaneController>
 
             if (offset != Vector3.zero)
                 m_bisectionPlane.DrawGizmo(Transform, -PlaneOffset);
-        }
-
-        if (m_drawCalculationPoints)
-        {
-
         }
     }
 
@@ -88,6 +90,14 @@ public class PlaneController : Singleton<PlaneController>
     private void UpdateSplittableMeshes()
     {
         Unibus.Dispatch(Sone.Event.FullyRecalculateSplittableMeshes);
+    }
+
+    private void OnCodeDown(Controls.Code code)
+    {
+        if (code == Controls.Code.COMBINE_GENERATED)
+        {
+            m_split = 0f;
+        }
     }
 
 }

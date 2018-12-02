@@ -160,7 +160,7 @@ public class MeshStretcher
     /// <summary>
     /// Set the amount by which the mesh will be extruded in the direction of the normal of the bisecting plane.
     /// </summary>
-    public void SetStretch(float stretch)
+    public void SetStretch(float stretch, GameObject gO = null)
     {
         CurrentStretch = Mathf.Max(0f, stretch);
 
@@ -171,7 +171,7 @@ public class MeshStretcher
             m_finalTriangles[CENTRE] = new List<int>(m_intersectionTriangleCache);
             m_finalNormals[CENTRE] = new List<Vector3>(m_intersectionNormalCache);
 
-            CalculateStretch();
+            CalculateStretch(gO);
         }
         else
         {
@@ -401,12 +401,14 @@ public class MeshStretcher
     /// Given a 'split size' and an array of pairwise points of intersection, 'extrude' the points on either side
     /// of the bisection plane's normal by that size, and then generate the triangles to make those points into a mesh.
     /// </summary>
-    private void CalculateStretch()
+    private void CalculateStretch(GameObject gO = null)
     {
         Vector3 change = CapOffset;
 
-        if (m_meshFilters[TOP] == null)
-            Debug.Log("It's null.", m_originalMeshRenderer);
+        if (m_meshFilters[TOP] == null && gO != null)
+        {
+            Debug.Log("It's null - " + gO.name, gO);
+        }
 
         m_meshFilters[TOP].transform.position = change;
         m_meshFilters[BOTTOM].transform.position = -change;
