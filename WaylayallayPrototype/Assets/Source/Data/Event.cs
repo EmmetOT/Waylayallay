@@ -20,5 +20,6 @@ namespace Sone
 
         public const string FullyRecalculateSplittableMeshes = "FullyRecalculateSplittableMeshes";
         public const string SetSplittableMeshStretching = "SetSplittableMeshStretching";
+        public const string BakeSplitMeshes = "BakeSplitMeshes";
     }
 }

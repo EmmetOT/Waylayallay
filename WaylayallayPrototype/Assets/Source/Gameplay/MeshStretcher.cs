@@ -555,11 +555,14 @@ public class MeshStretcher
         GameObject newGameObject = new GameObject(renderer.gameObject.name + "_" + name);
         newGameObject.transform.SetParent(m_parent);
 
-        MeshCollider mc = newGameObject.AddComponent<MeshCollider>();
+        if (Manager.PlaneController.GenerateRigidbodies)
+        {
+            MeshCollider mc = newGameObject.AddComponent<MeshCollider>();
 
-        Rigidbody rb = newGameObject.AddComponent<Rigidbody>();
-        rb.useGravity = false;
-        rb.isKinematic = true;
+            Rigidbody rb = newGameObject.AddComponent<Rigidbody>();
+            rb.useGravity = false;
+            rb.isKinematic = true;
+        }
         
         newGameObject.AddComponent<MeshRenderer>().material = renderer.material;
         return newGameObject.AddComponent<MeshFilter>();

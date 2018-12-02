@@ -45,21 +45,19 @@ public class SplittableMesh : MonoBehaviour
         m_positionCache = Transform.position;
         m_rotationCache = Transform.rotation;
         m_scaleCache = Transform.lossyScale;
-
-        Debug.Log("Awake! (" + name + ")", this);
-
+        
         m_stretcher = new MeshStretcher(MeshFilter, Manager.PlaneController.BisectionPlane);
 
         Unibus.Subscribe(Sone.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
         Unibus.Subscribe<float>(Sone.Event.SetSplittableMeshStretching, UpdateMeshStretching);
-        Unibus.Subscribe<Controls.Code>(Sone.Event.OnCodeDown, OnCodeDown);
+        Unibus.Subscribe(Sone.Event.BakeSplitMeshes, BakeSplitMesh);
     }
 
     private void OnDestroy()
     {
         Unibus.Unsubscribe(Sone.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
         Unibus.Unsubscribe<float>(Sone.Event.SetSplittableMeshStretching, UpdateMeshStretching);
-        Unibus.Unsubscribe<Controls.Code>(Sone.Event.OnCodeDown, OnCodeDown);
+        Unibus.Unsubscribe(Sone.Event.BakeSplitMeshes, BakeSplitMesh);
     }
 
     private void LateUpdate()
@@ -94,13 +92,9 @@ public class SplittableMesh : MonoBehaviour
             m_stretcher.DrawCalculationPoints(Color.red);
     }
 
-    private void OnCodeDown(Controls.Code code)
+    private void BakeSplitMesh()
     {
-        if (code == Controls.Code.COMBINE_GENERATED)
-        {
-            m_stretcher.Combine();
-            Destroy(gameObject);
-        }
-
+        m_stretcher.Combine();
+        Destroy(gameObject);
     }
 }
