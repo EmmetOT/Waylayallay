@@ -90,6 +90,9 @@ public class SplittableMesh : MonoBehaviour
 
         if (Manager.PlaneController.DrawCalculationPoints)
             m_stretcher.DrawCalculationPoints(Color.red);
+
+        if (Manager.PlaneController.DrawMeshSimplifierGizmos)
+            m_stretcher.DrawMeshSimplifierGizmos();
     }
 
     private void BakeSplitMesh()

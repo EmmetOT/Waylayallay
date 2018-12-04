@@ -274,7 +274,15 @@ namespace Sone
         {
             return new Vector3(vec.x, 0f, vec.z);
         }
-        
+
+        public static int HashableVector3(this Vector3 vector)
+        {
+            int x = Mathf.RoundToInt(vector.x * 100000f);
+            int y = Mathf.RoundToInt(vector.y * 100000f);
+            int z = Mathf.RoundToInt(vector.z * 100000f);
+            return x ^ z ^ y;
+        }
+
         #endregion
     }
 }

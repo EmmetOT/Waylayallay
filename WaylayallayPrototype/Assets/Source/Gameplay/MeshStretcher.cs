@@ -1,5 +1,6 @@
 ﻿using Simplex;
 using Sone;
+using Sone.Maths;
 using System.Collections.Generic;
 using UnityEngine;
 using static Sone.Graph.Graph;
@@ -61,6 +62,8 @@ public class MeshStretcher
     public float CurrentStretch { get; private set; }
     public BisectionPlane BisectionPlane { get; private set; }
 
+    private MeshSimplifier[] m_meshSimplifiers;
+
     /// <summary>
     /// A direction vector from the center of the bisection plane to the caps.
     /// </summary>
@@ -106,7 +109,9 @@ public class MeshStretcher
 
         for (int i = 0; i < m_meshFilters.Length; i++)
             m_meshRenderers[i] = m_meshFilters[i].GetComponent<MeshRenderer>();
-        
+
+        m_meshSimplifiers = new MeshSimplifier[] { new MeshSimplifier(), new MeshSimplifier() };
+
         Calculate();
     }
 
@@ -138,6 +143,9 @@ public class MeshStretcher
     /// </summary>
     public void Calculate()
     {
+        m_meshSimplifiers[TOP].Clear();
+        m_meshSimplifiers[BOTTOM].Clear();
+
         SwitchRenderers();
 
         ClearAll();
@@ -155,6 +163,11 @@ public class MeshStretcher
         CalculateStretch();
 
         ApplyMeshes();
+
+        Debug.Log("Top:");
+        Debug.Log(m_meshSimplifiers[TOP]);
+        Debug.Log("Bottom:");
+        Debug.Log(m_meshSimplifiers[BOTTOM]);
     }
 
     /// <summary>
@@ -209,6 +222,8 @@ public class MeshStretcher
             Triangulator triangulator;
             for (int i = 0; i < m_bufferTriangles.Length; i++)
             {
+                m_meshSimplifiers[i].AddPolygons(m_bufferVertices[i], trianglePlane);
+
                 if (m_bufferVertices[i].Count > 3)
                 {
                     triangulator = new Triangulator(m_bufferVertices[i], trianglePlane.normal);
@@ -404,12 +419,7 @@ public class MeshStretcher
     private void CalculateStretch(GameObject gO = null)
     {
         Vector3 change = CapOffset;
-
-        if (m_meshFilters[TOP] == null && gO != null)
-        {
-            Debug.Log("It's null - " + gO.name, gO);
-        }
-
+        
         m_meshFilters[TOP].transform.position = change;
         m_meshFilters[BOTTOM].transform.position = -change;
         m_meshFilters[CENTRE].transform.position = Vector3.zero;
@@ -624,6 +634,18 @@ public class MeshStretcher
     public void DrawCalculationPoints(Color colour, float radius = 0.03f)
     {
         DrawPoints(colour, m_calculationVertices, radius);
+    }
+
+    public void DrawMeshSimplifierGizmos()
+    {
+        if (m_meshSimplifiers.IsNullOrEmpty() || m_meshSimplifiers.Length < 2)
+            return;
+
+        if (m_meshSimplifiers[TOP] != null)
+            m_meshSimplifiers[TOP].DrawGizmos(Vector3.left * 0.1f);
+
+        if (m_meshSimplifiers[BOTTOM] != null)
+            m_meshSimplifiers[BOTTOM].DrawGizmos(Vector3.left * -0.1f);
     }
 
     private void DrawPoints(Color colour, IList<Vector3> points, float radius = 0.03f)

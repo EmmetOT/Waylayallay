@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 namespace Sone.Maths
@@ -441,6 +442,160 @@ namespace Sone.Maths
         public int Compare(Vector3 v1, Vector3 v2)
         {
             return Mathf.Atan2(v1.x, v1.z).CompareTo(Mathf.Atan2(v2.x, v2.z));
+        }
+    }
+
+    public class MeshSimplifier
+    {
+        private Dictionary<int, HashSet<Vector3>> m_normalToVerticesLookup;
+
+        private Dictionary<int, Vector3> m_normals;
+
+        private Dictionary<int, HashSet<Vector3>> m_connectedCounts;
+
+        private Dictionary<int, Color> m_gizmoColours;
+
+        public MeshSimplifier()
+        {
+            m_normalToVerticesLookup = new Dictionary<int, HashSet<Vector3>>();
+            m_normals = new Dictionary<int, Vector3>();
+            m_connectedCounts = new Dictionary<int, HashSet<Vector3>>();
+        }
+
+        private void AddVertex(Vector3 referenceNormal, Vector3 vertex)
+        {
+            int key = referenceNormal.HashableVector3();
+
+            if (!m_normalToVerticesLookup.ContainsKey(key))
+                m_normalToVerticesLookup.Add(key, new HashSet<Vector3>());
+
+            if (!m_normals.ContainsKey(key))
+                m_normals.Add(key, referenceNormal);
+
+            m_normalToVerticesLookup[key].Add(vertex);
+        }
+
+        private void AddConnectedVertices(IList<Vector3> vectors)
+        {
+            for (int i = 0; i < vectors.Count; i++)
+            {
+                int iHash = vectors[i].HashableVector3();
+
+                for (int j = 0; j < vectors.Count; j++)
+                {
+                    if (vectors[i] != vectors[j])
+                    {
+                        if (!m_connectedCounts.ContainsKey(iHash))
+                            m_connectedCounts.Add(iHash, new HashSet<Vector3>());
+
+                        m_connectedCounts[iHash].Add(vectors[j]);
+                    }
+                }
+            }
+        }
+
+        public void AddPolygons(IList<Vector3> vectors, Plane plane)
+        {
+            for (int i = 0; i < vectors.Count; i++)
+                AddVertex(plane.normal, vectors[i]);
+
+            AddConnectedVertices(vectors);
+        }
+
+        public void AddPolygon(IList<Vector3> vectors)
+        {
+            Debug.Assert(vectors.Count >= 3, "Polygons must have at least three vertices!");
+
+            AddPolygons(vectors, new Plane(vectors[0], vectors[1], vectors[2]));
+        }
+
+        public void Clear()
+        {
+            m_normalToVerticesLookup.Clear();
+            m_normals.Clear();
+            m_connectedCounts.Clear();
+
+            if (m_gizmoColours != null)
+                m_gizmoColours.Clear();
+        }
+
+        public override string ToString()
+        {
+            if (m_normalToVerticesLookup == null)
+                return "Not initialized.";
+
+            StringBuilder sb = new StringBuilder();
+
+            foreach (KeyValuePair<int, HashSet<Vector3>> kvp in m_normalToVerticesLookup)
+            {
+                sb.Append(m_normals[kvp.Key] + " [" + kvp.Key + "]:\n");
+
+                foreach (Vector3 vertex in kvp.Value)
+                    sb.Append("\t" + vertex.ToString() + " (Connected to " + m_connectedCounts[vertex.HashableVector3()].Count + " other vertices.)\n");
+
+                sb.Append("\n");
+            }
+
+            sb.Append(m_normalToVerticesLookup.Count + " normals.");
+
+            return sb.ToString();
+        }
+
+        //private Vector3[] FindCandidatePolygonVertices(HashSet<Vector3> vecs)
+        //{
+        //    Vector3[] vertices = new Vector3[4];
+        //    int[] connected = new int[] { -1, -1, -1, -1 };
+        //    int verticesFound = 0;
+
+        //    foreach (Vector3 vec in vecs)
+        //    {
+        //        int vecHash = vec.HashableVector3();
+
+        //        for (int i = 0; i < connected.Length; i++)
+        //        {
+        //            if (connected[i] == -1)
+        //            {
+        //                connected[i] = m_connectedCounts[vecHash].Count;
+        //                vertices[i] = vec;
+        //                verticesFound++;
+
+        //                break;
+        //            }
+        //        }
+        //    }
+        //}
+
+        public void DrawGizmos(Vector3 offset = default(Vector3), float magnitude = 1f)
+        {
+#if UNITY_EDITOR
+
+            if (m_gizmoColours == null || m_gizmoColours.Count != m_normalToVerticesLookup.Count)
+            {
+                if (m_gizmoColours == null)
+                    m_gizmoColours = new Dictionary<int, Color>(m_normalToVerticesLookup.Count);
+                else
+                    m_gizmoColours.Clear();
+
+                foreach (int key in m_normalToVerticesLookup.Keys)
+                    m_gizmoColours.Add(key, Random.ColorHSV());
+            }
+
+            foreach (KeyValuePair<int, HashSet<Vector3>> kvp in m_normalToVerticesLookup)
+            {
+                Gizmos.color = m_gizmoColours[kvp.Key];
+                
+                foreach (Vector3 vertex in kvp.Value)
+                {
+                    Gizmos.DrawSphere(vertex + offset, 0.08f);
+                    Gizmos.DrawLine(vertex + offset, vertex + offset + m_normals[kvp.Key] * magnitude);
+                }
+            }
+
+            if (m_normalToVerticesLookup.Count <= 4)
+                return;
+
+
+#endif
         }
     }
 }

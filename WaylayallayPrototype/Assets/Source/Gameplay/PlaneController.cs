@@ -43,6 +43,11 @@ public class PlaneController : Singleton<PlaneController>
     private bool m_drawCalculationPoints = false;
     public bool DrawCalculationPoints { get { return m_drawCalculationPoints; } }
 
+    [SerializeField]
+    [BoxGroup("Debug")]
+    private bool m_drawMeshSimplifierGizmos = false;
+    public bool DrawMeshSimplifierGizmos { get { return m_drawMeshSimplifierGizmos; } }
+
     public Vector3 PlaneOffset { get { return m_bisectionPlane.Normal.normalized * m_split * 0.5f; } }
 
     private Transform m_transform;
@@ -86,15 +91,24 @@ public class PlaneController : Singleton<PlaneController>
     {
         Unibus.Dispatch(Sone.Event.SetSplittableMeshStretching, m_split);
     }
-
+    
     private void OnPlaneChanged()
     {
-        Unibus.Dispatch(Sone.Event.FullyRecalculateSplittableMeshes);
-
         if (m_split > 0f)
         {
-            Unibus.Dispatch(Sone.Event.BakeSplitMeshes);
             m_split = 0f;
+            //Unibus.Dispatch(Sone.Event.BakeSplitMeshes);
         }
+
+        Unibus.Dispatch(Sone.Event.FullyRecalculateSplittableMeshes);
+    }
+
+    [Button]
+    public void TestBake()
+    {
+        Unibus.Dispatch(Sone.Event.BakeSplitMeshes);
+        m_split = 0f;
+        Unibus.Dispatch(Sone.Event.FullyRecalculateSplittableMeshes);
+
     }
 }
