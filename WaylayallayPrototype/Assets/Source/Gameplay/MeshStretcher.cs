@@ -220,17 +220,20 @@ public class MeshStretcher
         if (TryBisectTriangle(startingIndex, BisectionPlane, out partition))
         {
             Triangulator triangulator;
+            bool foundSplitTriangle = false;
+
             for (int i = 0; i < m_bufferTriangles.Length; i++)
             {
-                m_meshSimplifiers[i].AddPolygons(m_bufferVertices[i], trianglePlane);
+                if (i == TOP || i == BOTTOM)
+                    m_meshSimplifiers[i].AddPolygons(m_bufferVertices[i], trianglePlane);
 
-                if (m_bufferVertices[i].Count > 3)
+                if (!foundSplitTriangle && m_bufferVertices[i].Count > 3)
                 {
                     triangulator = new Triangulator(m_bufferVertices[i], trianglePlane.normal);
                     m_bufferTriangles[i] = new List<int>(triangulator.Triangulate());
 
                     // only one triangle can be split
-                    break;
+                    foundSplitTriangle = true;
                 }
             }
 

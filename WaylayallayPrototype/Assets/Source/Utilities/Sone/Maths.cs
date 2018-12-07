@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using System.Linq;
 
 namespace Sone.Maths
 {
@@ -447,51 +448,76 @@ namespace Sone.Maths
 
     public class MeshSimplifier
     {
-        private Dictionary<int, HashSet<Vector3>> m_normalToVerticesLookup;
+        /// <summary>
+        /// Associate a normal with all the vertices of any triangle with that normal
+        /// </summary>
+        private Dictionary<VectorNode, HashSet<VectorNode>> m_normalToVerticesLookup;
 
-        private Dictionary<int, Vector3> m_normals;
+        private Dictionary<VectorNode, Vector3[]> m_normalToCandidatesLookup;
 
-        private Dictionary<int, HashSet<Vector3>> m_connectedCounts;
+        /// <summary>
+        /// Link each vertex to its connected vertices
+        /// </summary>
+        private Dictionary<VectorNode, HashSet<VectorNode>> m_connectedVertices;
 
-        private Dictionary<int, Color> m_gizmoColours;
+        private Dictionary<VectorNode, Color> m_gizmoColours;
 
+        
+        
         public MeshSimplifier()
         {
-            m_normalToVerticesLookup = new Dictionary<int, HashSet<Vector3>>();
-            m_normals = new Dictionary<int, Vector3>();
-            m_connectedCounts = new Dictionary<int, HashSet<Vector3>>();
+            m_normalToVerticesLookup = new Dictionary<VectorNode, HashSet<VectorNode>>();
+            m_connectedVertices = new Dictionary<VectorNode, HashSet<VectorNode>>();
+            m_normalToCandidatesLookup = new Dictionary<VectorNode, Vector3[]>();
+        }
+
+        public void Calculate()
+        {
+            m_normalToCandidatesLookup.Clear();
+
+            foreach (KeyValuePair<VectorNode, HashSet<VectorNode>> kvp in m_normalToVerticesLookup)
+                m_normalToCandidatesLookup.Add(kvp.Key, FindCandidatePolygonVertices(kvp.Key.Vector));
         }
 
         private void AddVertex(Vector3 referenceNormal, Vector3 vertex)
         {
-            int key = referenceNormal.HashableVector3();
+            VectorNode normalNode = new VectorNode(referenceNormal);
 
-            if (!m_normalToVerticesLookup.ContainsKey(key))
-                m_normalToVerticesLookup.Add(key, new HashSet<Vector3>());
-
-            if (!m_normals.ContainsKey(key))
-                m_normals.Add(key, referenceNormal);
-
-            m_normalToVerticesLookup[key].Add(vertex);
+            if (!m_normalToVerticesLookup.ContainsKey(normalNode))
+                m_normalToVerticesLookup.Add(normalNode, new HashSet<VectorNode>());
+            
+            m_normalToVerticesLookup[referenceNormal].Add(vertex);
         }
 
+        /// <summary>
+        /// Note that all the given vertices are connected in a sequence.
+        /// </summary>
         private void AddConnectedVertices(IList<Vector3> vectors)
         {
             for (int i = 0; i < vectors.Count; i++)
-            {
-                int iHash = vectors[i].HashableVector3();
+                AddConnected(vectors[i], vectors[(i + 1) % vectors.Count]);
+        }
 
-                for (int j = 0; j < vectors.Count; j++)
-                {
-                    if (vectors[i] != vectors[j])
-                    {
-                        if (!m_connectedCounts.ContainsKey(iHash))
-                            m_connectedCounts.Add(iHash, new HashSet<Vector3>());
+        /// <summary>
+        /// Note that 2 vertices are connected to one another.
+        /// </summary>
+        private void AddConnected(Vector3 a, Vector3 b)
+        {
+            if (a == b)
+                return;
 
-                        m_connectedCounts[iHash].Add(vectors[j]);
-                    }
-                }
-            }
+            VectorNode aNode = new VectorNode(a);
+            VectorNode bNode = new VectorNode(b);
+
+            if (!m_connectedVertices.ContainsKey(aNode))
+                m_connectedVertices.Add(aNode, new HashSet<VectorNode>());
+            
+            m_connectedVertices[aNode].Add(b);
+
+            if (!m_connectedVertices.ContainsKey(bNode))
+                m_connectedVertices.Add(bNode, new HashSet<VectorNode>());
+            
+            m_connectedVertices[bNode].Add(a);
         }
 
         public void AddPolygons(IList<Vector3> vectors, Plane plane)
@@ -512,8 +538,8 @@ namespace Sone.Maths
         public void Clear()
         {
             m_normalToVerticesLookup.Clear();
-            m_normals.Clear();
-            m_connectedCounts.Clear();
+            m_connectedVertices.Clear();
+            m_normalToCandidatesLookup.Clear();
 
             if (m_gizmoColours != null)
                 m_gizmoColours.Clear();
@@ -526,44 +552,60 @@ namespace Sone.Maths
 
             StringBuilder sb = new StringBuilder();
 
-            foreach (KeyValuePair<int, HashSet<Vector3>> kvp in m_normalToVerticesLookup)
+            Calculate();
+
+            foreach (KeyValuePair<VectorNode, HashSet<VectorNode>> kvp in m_normalToVerticesLookup)
             {
-                sb.Append(m_normals[kvp.Key] + " [" + kvp.Key + "]:\n");
+                sb.Append(kvp.Key.Vector.ToString() + " [" + kvp.Key + "]:\n");
 
                 foreach (Vector3 vertex in kvp.Value)
-                    sb.Append("\t" + vertex.ToString() + " (Connected to " + m_connectedCounts[vertex.HashableVector3()].Count + " other vertices.)\n");
+                {
+                    HashSet<VectorNode> connectedVecs = m_connectedVertices[vertex];
+
+                    sb.Append("\t" + vertex.ToString() + " (Connected to " + connectedVecs.Count + " other vertices.)\n");
+
+                    foreach (Vector3 connected in connectedVecs)
+                        sb.Append("\t\t" + connected.ToString() + "\n");
+
+                }
 
                 sb.Append("\n");
+
+                Vector3[] candidates = m_normalToCandidatesLookup[kvp.Key.Vector];
+
+                sb.Append("CANDIDATES: ");
+
+                foreach (Vector3 candidate in candidates)
+                {
+                    sb.Append("\t" + candidate + "\n");
+                }
             }
 
-            sb.Append(m_normalToVerticesLookup.Count + " normals.");
+            sb.Append(Temp(new Vector3(4f, 0, 4f)));
+            sb.Append(Temp(new Vector3(-4f, 0, 4f)));
+            sb.Append(Temp(new Vector3(4f, 0, -4f)));
+            sb.Append(Temp(new Vector3(-4f, 0, -4f)));
+            sb.Append(Temp(new Vector3(-0.6f, 0, -4f)));
+            sb.Append(Temp(new Vector3(0.6f, 0, 4f)));
+            sb.Append(Temp(new Vector3(-0.6f, 0, 4f)));
+            sb.Append(Temp(new Vector3(0.6f, 0, -4f)));
 
             return sb.ToString();
         }
 
-        //private Vector3[] FindCandidatePolygonVertices(HashSet<Vector3> vecs)
-        //{
-        //    Vector3[] vertices = new Vector3[4];
-        //    int[] connected = new int[] { -1, -1, -1, -1 };
-        //    int verticesFound = 0;
+        private string Temp(Vector3 vec)
+        {
+            return (vec.ToString() + ": " + vec.HashableVector3() + "\n");
+        }
 
-        //    foreach (Vector3 vec in vecs)
-        //    {
-        //        int vecHash = vec.HashableVector3();
-
-        //        for (int i = 0; i < connected.Length; i++)
-        //        {
-        //            if (connected[i] == -1)
-        //            {
-        //                connected[i] = m_connectedCounts[vecHash].Count;
-        //                vertices[i] = vec;
-        //                verticesFound++;
-
-        //                break;
-        //            }
-        //        }
-        //    }
-        //}
+        private Vector3[] FindCandidatePolygonVertices(Vector3 normal)
+        {
+            // take all the vertices which belong to a triangle with the given normal,
+            // and sort these vertices by the amount of vertices connected to them.
+            // return the 4 with the least connections
+            
+            return m_normalToVerticesLookup[normal].OrderBy(v => m_connectedVertices[v].Count).Take(4).Select(v => v.Vector).ToArray();
+        }
 
         public void DrawGizmos(Vector3 offset = default(Vector3), float magnitude = 1f)
         {
@@ -572,30 +614,84 @@ namespace Sone.Maths
             if (m_gizmoColours == null || m_gizmoColours.Count != m_normalToVerticesLookup.Count)
             {
                 if (m_gizmoColours == null)
-                    m_gizmoColours = new Dictionary<int, Color>(m_normalToVerticesLookup.Count);
+                    m_gizmoColours = new Dictionary<VectorNode, Color>(m_normalToVerticesLookup.Count);
                 else
                     m_gizmoColours.Clear();
 
-                foreach (int key in m_normalToVerticesLookup.Keys)
+                foreach (VectorNode key in m_normalToVerticesLookup.Keys)
                     m_gizmoColours.Add(key, Random.ColorHSV());
+
+                Calculate();
             }
 
-            foreach (KeyValuePair<int, HashSet<Vector3>> kvp in m_normalToVerticesLookup)
+            UnityEditor.Handles.color = Color.black;
+
+            foreach (KeyValuePair<VectorNode, HashSet<VectorNode>> kvp in m_normalToVerticesLookup)
             {
                 Gizmos.color = m_gizmoColours[kvp.Key];
                 
                 foreach (Vector3 vertex in kvp.Value)
                 {
+                    UnityEditor.Handles.Label(vertex + offset, vertex.ToString());
+
                     Gizmos.DrawSphere(vertex + offset, 0.08f);
-                    Gizmos.DrawLine(vertex + offset, vertex + offset + m_normals[kvp.Key] * magnitude);
+                    Gizmos.DrawLine(vertex + offset, vertex + offset + kvp.Key.Vector * magnitude);
+                }
+
+                Vector3[] candidates = m_normalToCandidatesLookup[kvp.Key.Vector];
+
+                Gizmos.color = Color.red;
+
+                foreach (Vector3 candidate in candidates)
+                {
+                    Gizmos.DrawSphere(candidate + offset + Vector3.up * -0.3f, 0.08f);
                 }
             }
-
+            
             if (m_normalToVerticesLookup.Count <= 4)
                 return;
 
 
 #endif
+        }
+    }
+
+    /// <summary>
+    /// A struct which associates a vector with a hash code which is much more likely to be nice
+    /// and consistent than Vector3's default hash.
+    /// </summary>
+    public struct VectorNode
+    {
+        public int Hash { get; private set; }
+        public Vector3 Vector { get; private set; }
+
+        public VectorNode(Vector3 vector)
+        {
+            Vector = vector;
+            Hash = Vector.HashableVector3();
+        }
+
+        public override int GetHashCode()
+        {
+            return Hash;
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (!(obj is VectorNode))
+                return false;
+
+            return ((VectorNode)obj).Hash == Hash;
+        }
+
+        public static implicit operator Vector3(VectorNode node)
+        {
+            return node.Vector;
+        }
+
+        public static implicit operator VectorNode(Vector3 vec)
+        {
+            return new VectorNode(vec);
         }
     }
 }

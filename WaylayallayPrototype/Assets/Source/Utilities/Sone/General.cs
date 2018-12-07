@@ -277,10 +277,13 @@ namespace Sone
 
         public static int HashableVector3(this Vector3 vector)
         {
-            int x = Mathf.RoundToInt(vector.x * 100000f);
-            int y = Mathf.RoundToInt(vector.y * 100000f);
-            int z = Mathf.RoundToInt(vector.z * 100000f);
-            return x ^ z ^ y;
+            int hash = 17;
+
+            hash = hash * 31 + Mathf.RoundToInt(vector.x * 10000f);
+            hash = hash * 31 + Mathf.RoundToInt(vector.y * 10000f);
+            hash = hash * 31 + Mathf.RoundToInt(vector.z * 10000f);
+
+            return hash;
         }
 
         #endregion
