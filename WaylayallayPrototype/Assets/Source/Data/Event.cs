@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Sone
+namespace Simplex
 {
     public static class Event
     {

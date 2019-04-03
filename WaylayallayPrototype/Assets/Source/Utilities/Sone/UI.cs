@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Sone.UI
+namespace Simplex
 {
-    public static class UI
+    public static partial class UI
     {
         private static Texture2D m_whiteTexture;
 

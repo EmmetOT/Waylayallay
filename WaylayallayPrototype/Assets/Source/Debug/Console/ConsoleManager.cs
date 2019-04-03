@@ -9,9 +9,7 @@ using System.Collections;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine.UI;
-using Sone.Strings;
-using Sone;
-using Sone.Reflection;
+using Simplex;
 
 public class ConsoleManager : Singleton<ConsoleManager>
 {

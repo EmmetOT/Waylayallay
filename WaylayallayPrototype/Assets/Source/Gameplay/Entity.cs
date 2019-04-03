@@ -1,8 +1,6 @@
 ﻿using UnityEngine;
 using UnibusEvent;
-using Sone;
-using Sone.Maths;
-using NaughtyAttributes;
+using Simplex;
 
 namespace Simplex
 {

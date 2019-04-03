@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Simplex;
-using Sone;
+using Simplex;
 using UnibusEvent;
 
 [RequireComponent(typeof(MeshFilter))]
@@ -48,16 +48,16 @@ public class SplittableMesh : MonoBehaviour
         
         m_stretcher = new MeshStretcher(MeshFilter, Manager.PlaneController.BisectionPlane);
 
-        Unibus.Subscribe(Sone.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
-        Unibus.Subscribe<float>(Sone.Event.SetSplittableMeshStretching, UpdateMeshStretching);
-        Unibus.Subscribe(Sone.Event.BakeSplitMeshes, BakeSplitMesh);
+        Unibus.Subscribe(Simplex.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
+        Unibus.Subscribe<float>(Simplex.Event.SetSplittableMeshStretching, UpdateMeshStretching);
+        Unibus.Subscribe(Simplex.Event.BakeSplitMeshes, BakeSplitMesh);
     }
 
     private void OnDestroy()
     {
-        Unibus.Unsubscribe(Sone.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
-        Unibus.Unsubscribe<float>(Sone.Event.SetSplittableMeshStretching, UpdateMeshStretching);
-        Unibus.Unsubscribe(Sone.Event.BakeSplitMeshes, BakeSplitMesh);
+        Unibus.Unsubscribe(Simplex.Event.FullyRecalculateSplittableMeshes, CalculateMesh);
+        Unibus.Unsubscribe<float>(Simplex.Event.SetSplittableMeshStretching, UpdateMeshStretching);
+        Unibus.Unsubscribe(Simplex.Event.BakeSplitMeshes, BakeSplitMesh);
     }
 
     private void LateUpdate()
@@ -83,7 +83,7 @@ public class SplittableMesh : MonoBehaviour
         m_stretcher.SetStretch(stretch, gameObject);
     }
 
-    private void OnDrawGizmosSelected()
+    private void OnDrawGizmos()
     {
         if (m_stretcher == null)
             return;
@@ -91,8 +91,18 @@ public class SplittableMesh : MonoBehaviour
         if (Manager.PlaneController.DrawCalculationPoints)
             m_stretcher.DrawCalculationPoints(Color.red);
 
-        if (Manager.PlaneController.DrawMeshSimplifierGizmos)
-            m_stretcher.DrawMeshSimplifierGizmos();
+        if (Manager.PlaneController.DrawUpperMeshSimplifierGizmos)
+            m_stretcher.DrawMeshSimplifierGizmos(0, Vector3.left * 0.1f);
+
+        if (Manager.PlaneController.DrawLowerMeshSimplifierGizmos)
+            m_stretcher.DrawMeshSimplifierGizmos(1, Vector3.left * -0.1f);
+
+        if (Manager.PlaneController.DrawMeshSimplifierEdges)
+        {
+            m_stretcher.DrawMeshSimplifierEdges(0, Color.red, Vector3.right * 0.1f);
+            m_stretcher.DrawMeshSimplifierEdges(1, Color.blue, Vector3.right * -0.1f);
+
+        }
     }
 
     private void BakeSplitMesh()

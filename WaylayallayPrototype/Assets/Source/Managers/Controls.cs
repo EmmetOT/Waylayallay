@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 using UnibusEvent;
-using Event = Sone.Event;
+using Event = Simplex.Event;
 
 namespace Simplex
 {

@@ -1,5 +1,5 @@
 ﻿using UnityEngine;
-using Event = Sone.Event;
+using Event = Simplex.Event;
 
 namespace Simplex
 {

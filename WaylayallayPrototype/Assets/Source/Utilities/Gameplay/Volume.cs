@@ -1,9 +1,9 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using Sone;
+using Simplex;
 using System.Linq;
-using Event = Sone.Event;
+using Event = Simplex.Event;
 
 namespace Simplex
 {

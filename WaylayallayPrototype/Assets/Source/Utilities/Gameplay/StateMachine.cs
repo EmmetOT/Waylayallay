@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using System;
 
-namespace Sone
+namespace Simplex
 {
     /// <summary>
     /// This is a very simple traditional state machine. 

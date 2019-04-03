@@ -1,5 +1,4 @@
-﻿using Sone;
-using Sone.Strings;
+﻿using Simplex;
 using System;
 using System.Collections.Generic;
 

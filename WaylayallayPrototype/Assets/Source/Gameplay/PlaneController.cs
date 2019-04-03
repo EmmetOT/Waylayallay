@@ -2,9 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using Sone;
-using UnibusEvent;
 using Simplex;
+using UnibusEvent;
 
 public class PlaneController : Singleton<PlaneController>
 {
@@ -45,8 +44,18 @@ public class PlaneController : Singleton<PlaneController>
 
     [SerializeField]
     [BoxGroup("Debug")]
-    private bool m_drawMeshSimplifierGizmos = false;
-    public bool DrawMeshSimplifierGizmos { get { return m_drawMeshSimplifierGizmos; } }
+    private bool m_drawUpperMeshSimplifierGizmos = false;
+    public bool DrawUpperMeshSimplifierGizmos { get { return m_drawUpperMeshSimplifierGizmos; } }
+
+    [SerializeField]
+    [BoxGroup("Debug")]
+    private bool m_drawLowerMeshSimplifierGizmos = false;
+    public bool DrawLowerMeshSimplifierGizmos { get { return m_drawLowerMeshSimplifierGizmos; } }
+
+    [SerializeField]
+    [BoxGroup("Debug")]
+    private bool m_drawMeshSimplifierEdges = false;
+    public bool DrawMeshSimplifierEdges { get { return m_drawMeshSimplifierEdges; } }
 
     public Vector3 PlaneOffset { get { return m_bisectionPlane.Normal.normalized * m_split * 0.5f; } }
 
@@ -89,7 +98,7 @@ public class PlaneController : Singleton<PlaneController>
 
     private void UpdateSplit()
     {
-        Unibus.Dispatch(Sone.Event.SetSplittableMeshStretching, m_split);
+        Unibus.Dispatch(Simplex.Event.SetSplittableMeshStretching, m_split);
     }
     
     private void OnPlaneChanged()
@@ -100,15 +109,15 @@ public class PlaneController : Singleton<PlaneController>
             //Unibus.Dispatch(Sone.Event.BakeSplitMeshes);
         }
 
-        Unibus.Dispatch(Sone.Event.FullyRecalculateSplittableMeshes);
+        Unibus.Dispatch(Simplex.Event.FullyRecalculateSplittableMeshes);
     }
 
     [Button]
     public void TestBake()
     {
-        Unibus.Dispatch(Sone.Event.BakeSplitMeshes);
+        Unibus.Dispatch(Simplex.Event.BakeSplitMeshes);
         m_split = 0f;
-        Unibus.Dispatch(Sone.Event.FullyRecalculateSplittableMeshes);
+        Unibus.Dispatch(Simplex.Event.FullyRecalculateSplittableMeshes);
 
     }
 }

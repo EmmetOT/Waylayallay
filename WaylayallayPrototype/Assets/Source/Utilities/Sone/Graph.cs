@@ -1,10 +1,9 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
-using static Sone.Graph.Graph;
 
-namespace Sone.Graph
+namespace Simplex
 {
-    public static class Graph
+    public static partial class Graph
     {
         //public class Node
         //{
@@ -112,64 +111,9 @@ namespace Sone.Graph
         
     }
     
-    //public struct Grapher
-    //{
-    //    private Dictionary<Vector3, HashSet<Vector3>> m_edges;
-
-    //    public Grapher(Mesh mesh) : this(mesh.vertices, mesh.triangles) { }
-
-    //    public Grapher(Vector3[] vertices, int[] triangles)
-    //    {
-    //        m_edges = new Dictionary<Vector3, HashSet<Vector3>>();
-
-    //        for (int i = 0; i < triangles.Length; i += 3)
-    //        {
-    //            AddEdge(vertices[triangles[i]], vertices[triangles[i + 1]]);
-    //            AddEdge(vertices[triangles[i + 1]], vertices[triangles[i + 2]]);
-    //            AddEdge(vertices[triangles[i + 2]], vertices[triangles[i]]);
-    //        }
-    //    }
-
-    //    public List<Edge> GetEdges()
-    //    {
-    //        List<Edge> edges = new List<Edge>(m_edges.Count * 2);
-
-    //        foreach (KeyValuePair<Vector3, HashSet<Vector3>> kvp in m_edges)
-    //        {
-    //            foreach (Vector3 b in kvp.Value)
-    //            {
-    //                edges.Add(new Edge(kvp.Key, b));
-    //            }
-    //        }
-
-    //        return edges;
-    //    }
-
-    //    private void AddEdge(Vector3 a, Vector3 b)
-    //    {
-    //        if (m_edges.ContainsKey(a))
-    //        {
-    //            if (m_edges[a] == null)
-    //                m_edges[a] = new HashSet<Vector3>();
-
-    //            m_edges[a].Add(b);
-    //        }
-    //        else
-    //        {
-    //            if (!m_edges.ContainsKey(b))
-    //                m_edges.Add(b, new HashSet<Vector3>());
-
-    //            if (m_edges[b] == null)
-    //                m_edges[b] = new HashSet<Vector3>();
-
-    //            m_edges[b].Add(a);
-    //        }
-    //    }
-    //}
-
-    public struct ColouredVertexClockwiseComparer : IComparer<ColouredVertex>
+    public struct ColouredVertexClockwiseComparer : IComparer<Graph.ColouredVertex>
     {
-        public int Compare(ColouredVertex v1, ColouredVertex v2)
+        public int Compare(Graph.ColouredVertex v1, Graph.ColouredVertex v2)
         {
             return Mathf.Atan2(v1.Vertex.x, v1.Vertex.z).CompareTo(Mathf.Atan2(v2.Vertex.x, v2.Vertex.z));
         }

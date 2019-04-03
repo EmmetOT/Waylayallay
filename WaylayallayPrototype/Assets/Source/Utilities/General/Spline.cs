@@ -1,8 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using Sone.Maths;
-using Sone;
+using Simplex;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif

@@ -1,9 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
 using System.IO;
-using Sone.Strings;
-using Sone;
-using Sone.UI;
+using Simplex;
 
 public class Console : MonoBehaviour
 {

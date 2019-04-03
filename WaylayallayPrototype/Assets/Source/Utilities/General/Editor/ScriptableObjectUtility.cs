@@ -1,7 +1,7 @@
 ﻿using UnityEditor;
 using UnityEngine;
 using System.IO;
-using Sone;
+using Simplex;
 using Simplex;
 
 public static class ScriptableObjectUtility

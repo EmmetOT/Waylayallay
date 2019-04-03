@@ -5,7 +5,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEngine;
 
-namespace Sone.Reflection
+namespace Simplex
 {
     public static class Reflection
     {

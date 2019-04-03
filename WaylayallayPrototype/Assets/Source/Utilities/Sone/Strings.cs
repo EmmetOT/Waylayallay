@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
-namespace Sone.Strings
+namespace Simplex
 {
     public static class Strings
     {

@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.AI;
 
-namespace Sone
+namespace Simplex
 {
     public static class General
     {

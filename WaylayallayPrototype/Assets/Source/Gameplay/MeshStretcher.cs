@@ -1,9 +1,7 @@
 ﻿using Simplex;
-using Sone;
-using Sone.Maths;
+using Simplex;
 using System.Collections.Generic;
 using UnityEngine;
-using static Sone.Graph.Graph;
 
 [System.Serializable]
 public class MeshStretcher
@@ -216,7 +214,7 @@ public class MeshStretcher
 
         bool result = false;
 
-        Partition partition;
+        Graph.Partition partition;
         if (TryBisectTriangle(startingIndex, BisectionPlane, out partition))
         {
             Triangulator triangulator;
@@ -224,9 +222,6 @@ public class MeshStretcher
 
             for (int i = 0; i < m_bufferTriangles.Length; i++)
             {
-                if (i == TOP || i == BOTTOM)
-                    m_meshSimplifiers[i].AddPolygons(m_bufferVertices[i], trianglePlane);
-
                 if (!foundSplitTriangle && m_bufferVertices[i].Count > 3)
                 {
                     triangulator = new Triangulator(m_bufferVertices[i], trianglePlane.normal);
@@ -234,7 +229,20 @@ public class MeshStretcher
 
                     // only one triangle can be split
                     foundSplitTriangle = true;
+
+                    if (i == TOP || i == BOTTOM)
+                    {
+                        for (int j = 0; j < m_bufferTriangles[i].Count; j += 3)
+                        {
+                            m_meshSimplifiers[i].AddPolygons(new Vector3[] { m_bufferVertices[i][m_bufferTriangles[i][j]], m_bufferVertices[i][m_bufferTriangles[i][j + 1]], m_bufferVertices[i][m_bufferTriangles[i][j + 2]] }, trianglePlane);
+                        }
+                    }
                 }
+                else if (i == TOP || i == BOTTOM)
+                {
+                    m_meshSimplifiers[i].AddPolygons(m_bufferVertices[i], trianglePlane);
+                }
+
             }
 
             result = true;
@@ -248,7 +256,7 @@ public class MeshStretcher
             int b = m_originalTriangles[startingIndex + 1];
             int c = m_originalTriangles[startingIndex + 2];
 
-            if (partition == Partition.BOTH_POSITIVE)
+            if (partition == Graph.Partition.BOTH_POSITIVE)
             {
                 AddToBuffer(TOP, m_calculationVertices[a], m_originalUVs[a], m_originalNormals[a]);
                 AddToBuffer(TOP, m_calculationVertices[b], m_originalUVs[b], m_originalNormals[b]);
@@ -279,18 +287,18 @@ public class MeshStretcher
     /// Returns whether the triangle is bisected by the plane. If not bisected, the triangle must be on one side of the plane.
     /// Use the returned partition to determine which.
     /// </summary>
-    private bool TryBisectTriangle(int startIndex, Plane plane, out Partition partition)
+    private bool TryBisectTriangle(int startIndex, Plane plane, out Graph.Partition partition)
     {
         bool bisected = false;
 
         partition = BisectEdge(m_originalTriangles[startIndex], m_originalTriangles[startIndex + 1]);
-        bisected |= (partition == Partition.A_POSITIVE || partition == Partition.B_POSITIVE);
+        bisected |= (partition == Graph.Partition.A_POSITIVE || partition == Graph.Partition.B_POSITIVE);
 
         partition = BisectEdge(m_originalTriangles[startIndex + 1], m_originalTriangles[startIndex + 2]);
-        bisected |= (partition == Partition.A_POSITIVE || partition == Partition.B_POSITIVE);
+        bisected |= (partition == Graph.Partition.A_POSITIVE || partition == Graph.Partition.B_POSITIVE);
 
         partition = BisectEdge(m_originalTriangles[startIndex + 2], m_originalTriangles[startIndex]);
-        bisected |= (partition == Partition.A_POSITIVE || partition == Partition.B_POSITIVE);
+        bisected |= (partition == Graph.Partition.A_POSITIVE || partition == Graph.Partition.B_POSITIVE);
 
         return bisected;
     }
@@ -298,7 +306,7 @@ public class MeshStretcher
     /// <summary>
     /// Returns whether the given plane bisects the line from a to b, and the point of intersection. 
     /// </summary>
-    public Partition TryBisectEdge(Vector3 a, Vector3 b, Vector2 aUV, Vector2 bUV, Vector3 aNormal, Vector3 bNormal, out Vector2 intersectionUV, out Vector3 intersection, out Vector3 intersectionNormal)
+    public Graph.Partition TryBisectEdge(Vector3 a, Vector3 b, Vector2 aUV, Vector2 bUV, Vector3 aNormal, Vector3 bNormal, out Vector2 intersectionUV, out Vector3 intersection, out Vector3 intersectionNormal)
     {
         intersection = default(Vector3);
         intersectionUV = default(Vector2);
@@ -326,19 +334,19 @@ public class MeshStretcher
             // one of them seems to do the job.
             intersectionNormal = aNormal;// Vector2.Lerp(aNormal, bNormal, t);
 
-            return isAPositive ? Partition.A_POSITIVE : Partition.B_POSITIVE;
+            return isAPositive ? Graph.Partition.A_POSITIVE : Graph.Partition.B_POSITIVE;
         }
         else if (isAPositive)
         {
-            return Partition.BOTH_POSITIVE;
+            return Graph.Partition.BOTH_POSITIVE;
         }
         else
         {
-            return Partition.BOTH_NEGATIVE;
+            return Graph.Partition.BOTH_NEGATIVE;
         }
     }
 
-    private Partition BisectEdge(int vertexIndexA, int vertexIndexB)
+    private Graph.Partition BisectEdge(int vertexIndexA, int vertexIndexB)
     {
         Vector3 a = m_calculationVertices[vertexIndexA];
         Vector3 b = m_calculationVertices[vertexIndexB];
@@ -352,12 +360,12 @@ public class MeshStretcher
         Vector3 intersection;
         Vector2 intersectionUV;
         Vector3 intersectionNormal;
-        Partition partition = TryBisectEdge(a, b, aUV, bUV, aNormal, bNormal, out intersectionUV, out intersection, out intersectionNormal);
+        Graph.Partition partition = TryBisectEdge(a, b, aUV, bUV, aNormal, bNormal, out intersectionUV, out intersection, out intersectionNormal);
 
         // this edge is actually bisected!
-        if (partition == Partition.A_POSITIVE || partition == Partition.B_POSITIVE)
+        if (partition == Graph.Partition.A_POSITIVE || partition == Graph.Partition.B_POSITIVE)
         {
-            if (partition == Partition.A_POSITIVE)
+            if (partition == Graph.Partition.A_POSITIVE)
             {
                 // the first point given to the method is the 'upper' point
 
@@ -370,7 +378,7 @@ public class MeshStretcher
                 m_bufferUVs[CENTRE].Add(intersectionUV);
                 m_bufferNormals[CENTRE].Add(intersectionNormal);
             }
-            else if (partition == Partition.B_POSITIVE)
+            else if (partition == Graph.Partition.B_POSITIVE)
             {
                 // the first point is the 'lower' point
 
@@ -624,7 +632,7 @@ public class MeshStretcher
         if (mc != null)
         {
             mc.convex = true;
-            mc.inflateMesh = true;
+            //mc.inflateMesh = true;
             mc.sharedMesh = mesh;
         }
     }
@@ -639,16 +647,22 @@ public class MeshStretcher
         DrawPoints(colour, m_calculationVertices, radius);
     }
 
-    public void DrawMeshSimplifierGizmos()
+    public void DrawMeshSimplifierEdges(int index, Color col, Vector3 offset = default)
     {
-        if (m_meshSimplifiers.IsNullOrEmpty() || m_meshSimplifiers.Length < 2)
+        if (m_meshSimplifiers.IsNullOrEmpty() || m_meshSimplifiers.Length < 2 || (index != TOP && index != BOTTOM))
             return;
 
-        if (m_meshSimplifiers[TOP] != null)
-            m_meshSimplifiers[TOP].DrawGizmos(Vector3.left * 0.1f);
+        if (m_meshSimplifiers[index] != null)
+            m_meshSimplifiers[index].DrawEdges(col, offset);
+    }
 
-        if (m_meshSimplifiers[BOTTOM] != null)
-            m_meshSimplifiers[BOTTOM].DrawGizmos(Vector3.left * -0.1f);
+    public void DrawMeshSimplifierGizmos(int index, Vector3 offset = default)
+    {
+        if (m_meshSimplifiers.IsNullOrEmpty() || m_meshSimplifiers.Length < 2 || (index != TOP && index != BOTTOM))
+            return;
+
+        if (m_meshSimplifiers[index] != null)
+            m_meshSimplifiers[index].DrawGizmos(offset);
     }
 
     private void DrawPoints(Color colour, IList<Vector3> points, float radius = 0.03f)

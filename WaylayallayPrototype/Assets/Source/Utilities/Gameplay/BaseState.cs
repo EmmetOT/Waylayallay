@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Sone
+namespace Simplex
 {
     /// <summary>
     /// An abstract base state for states used by StateMachine. This state should only be used by 

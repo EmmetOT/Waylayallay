@@ -3,7 +3,7 @@ using System.Text;
 using UnityEngine;
 using System.Linq;
 
-namespace Sone.Maths
+namespace Simplex
 {
     public static class Maths
     {
@@ -461,8 +461,6 @@ namespace Sone.Maths
         private Dictionary<VectorNode, HashSet<VectorNode>> m_connectedVertices;
 
         private Dictionary<VectorNode, Color> m_gizmoColours;
-
-        
         
         public MeshSimplifier()
         {
@@ -494,8 +492,14 @@ namespace Sone.Maths
         /// </summary>
         private void AddConnectedVertices(IList<Vector3> vectors)
         {
+            StringBuilder sb = new StringBuilder();
             for (int i = 0; i < vectors.Count; i++)
+            {
+                sb.Append(vectors[i] + ", ");
                 AddConnected(vectors[i], vectors[(i + 1) % vectors.Count]);
+            }
+
+            Debug.Log(sb);
         }
 
         /// <summary>
@@ -505,7 +509,7 @@ namespace Sone.Maths
         {
             if (a == b)
                 return;
-
+            
             VectorNode aNode = new VectorNode(a);
             VectorNode bNode = new VectorNode(b);
 
@@ -528,7 +532,7 @@ namespace Sone.Maths
             AddConnectedVertices(vectors);
         }
 
-        public void AddPolygon(IList<Vector3> vectors)
+        public void AddTriangle(IList<Vector3> vectors)
         {
             Debug.Assert(vectors.Count >= 3, "Polygons must have at least three vertices!");
 
@@ -589,6 +593,7 @@ namespace Sone.Maths
             sb.Append(Temp(new Vector3(0.6f, 0, 4f)));
             sb.Append(Temp(new Vector3(-0.6f, 0, 4f)));
             sb.Append(Temp(new Vector3(0.6f, 0, -4f)));
+            sb.Append(Temp(new Vector3(-0.6f, 0, -0.6f)));
 
             return sb.ToString();
         }
@@ -605,6 +610,21 @@ namespace Sone.Maths
             // return the 4 with the least connections
             
             return m_normalToVerticesLookup[normal].OrderBy(v => m_connectedVertices[v].Count).Take(4).Select(v => v.Vector).ToArray();
+        }
+
+        /// <summary>
+        /// Draw all the connected edges.
+        /// </summary>
+        public void DrawEdges(Color colour, Vector3 offset = default)
+        {
+            Gizmos.color = colour;
+            foreach (KeyValuePair<VectorNode, HashSet<VectorNode>> kvp in m_connectedVertices)
+            {
+                foreach (VectorNode vec in kvp.Value)
+                {
+                    Gizmos.DrawLine(kvp.Key.Vector + offset, vec.Vector + offset);
+                }
+            }
         }
 
         public void DrawGizmos(Vector3 offset = default(Vector3), float magnitude = 1f)
@@ -632,7 +652,7 @@ namespace Sone.Maths
                 
                 foreach (Vector3 vertex in kvp.Value)
                 {
-                    UnityEditor.Handles.Label(vertex + offset, vertex.ToString());
+                    UnityEditor.Handles.Label(vertex + offset * 2f, vertex.ToString());
 
                     Gizmos.DrawSphere(vertex + offset, 0.08f);
                     Gizmos.DrawLine(vertex + offset, vertex + offset + kvp.Key.Vector * magnitude);

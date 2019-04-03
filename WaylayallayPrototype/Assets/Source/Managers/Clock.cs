@@ -22,7 +22,7 @@ public class Clock : MonoBehaviour
         if (m_timeElapsedInterval >= m_timeInterval)
         {
             m_timeElapsedInterval = 0f;
-            Unibus.Dispatch(Sone.Event.OnTimeStep);
+            Unibus.Dispatch(Simplex.Event.OnTimeStep);
         }
     }
 }
