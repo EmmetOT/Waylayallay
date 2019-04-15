@@ -275,13 +275,23 @@ namespace Simplex
             return new Vector3(vec.x, 0f, vec.z);
         }
 
-        public static int HashableVector3(this Vector3 vector)
+        public static int HashVector3(this Vector3 vector)
         {
             int hash = 17;
 
             hash = hash * 31 + Mathf.RoundToInt(vector.x * 10000f);
             hash = hash * 31 + Mathf.RoundToInt(vector.y * 10000f);
             hash = hash * 31 + Mathf.RoundToInt(vector.z * 10000f);
+
+            return hash;
+        }
+
+        public static int HashVector2(this Vector2 vector)
+        {
+            int hash = 17;
+
+            hash = hash * 31 + Mathf.RoundToInt(vector.x * 10000f);
+            hash = hash * 31 + Mathf.RoundToInt(vector.y * 10000f);
 
             return hash;
         }

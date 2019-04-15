@@ -600,7 +600,7 @@ namespace Simplex
 
         private string Temp(Vector3 vec)
         {
-            return (vec.ToString() + ": " + vec.HashableVector3() + "\n");
+            return (vec.ToString() + ": " + vec.HashVector3() + "\n");
         }
 
         private Vector3[] FindCandidatePolygonVertices(Vector3 normal)
@@ -688,7 +688,7 @@ namespace Simplex
         public VectorNode(Vector3 vector)
         {
             Vector = vector;
-            Hash = Vector.HashableVector3();
+            Hash = Vector.HashVector3();
         }
 
         public override int GetHashCode()
