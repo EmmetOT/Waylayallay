@@ -26,22 +26,15 @@ public class MorphTest : MonoBehaviour
         m_morph.DebugMode = true;
 
         m_a = m_morph.GetPoint(0);
+        
+        m_morph.AddEdge(0, 3);
+        
+        m_morph.AddEdge(m_morph.GetPoint(0), new Vector3(0.444f, 1f, 0.2f));
+        m_morph.AddEdge(new Vector3(0.444f, 1f, 0.2f), m_morph.GetPoint(2));
 
-        m_ab = m_morph.GetEdge(1, 3);
-
-        m_morph.DebugPrint();
-
-        //foreach (Morph.Point point in m_morph.Points)
-        //{
-        //    Debug.Log("Checking " + point);
-
-        //    foreach (Morph.Point point2 in m_morph.GetConnectedPoints(point))
-        //    {
-        //        Debug.Log("----> " + point2);
-        //    }
-        //}
+        m_ab = m_morph.GetEdge(4, 2);
     }
-    
+
     [Button]
     private void MovePointA()
     {
@@ -52,7 +45,7 @@ public class MorphTest : MonoBehaviour
     {
         if (m_morph == null)
             return;
-        
+
         m_morph.DrawGizmo();
 
         m_a.DrawGizmo(Color.red, radius: 0.1f, label: false);

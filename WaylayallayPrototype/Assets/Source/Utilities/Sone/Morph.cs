@@ -67,7 +67,7 @@ namespace Simplex
             Edge ab = new Edge(a, b);
             Edge bc = new Edge(b, c);
             Edge ca = new Edge(c, a);
-
+            
             AddEdge(ab);
             AddEdge(bc);
             AddEdge(ca);
@@ -84,9 +84,20 @@ namespace Simplex
         public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
         {
             AddTriangle(
-                m_lookups.GetExistingPointInSameLocation(a),
-                m_lookups.GetExistingPointInSameLocation(b),
-                m_lookups.GetExistingPointInSameLocation(c));
+                m_lookups.GetExistingPointInSameLocation(a.ToPoint()),
+                m_lookups.GetExistingPointInSameLocation(b.ToPoint()),
+                m_lookups.GetExistingPointInSameLocation(c.ToPoint()));
+        }
+
+        public void AddTriangle(int a, int b, int c)
+        {
+            Point pointA = m_hashes.GetPoint(a);
+            Point pointB = m_hashes.GetPoint(b);
+            Point pointC = m_hashes.GetPoint(c);
+
+            Debug.Assert(pointA != null && pointB != null && pointC != null, "All three points used to make a triangle must be in the Morph.");
+
+            AddTriangle(pointA, pointB, pointC);
         }
 
         public bool DebugMode = false;
@@ -101,11 +112,11 @@ namespace Simplex
         /// </summary>
         public void AddEdge(Edge edge)
         {
-            if (DebugMode)
-                Debug.Log("Adding an edge connecting " + edge.A + " and " + edge.B);
-
             m_hashes.AddPoint(edge.A);
             m_hashes.AddPoint(edge.B);
+
+            if (DebugMode)
+                Debug.Log("Adding an edge connecting " + edge.A + " and " + edge.B);
 
             m_hashes.AddEdge(edge);
 
@@ -113,17 +124,56 @@ namespace Simplex
             m_lookups.AddPoint(edge.B);
 
             m_lookups.AddEdge(edge);
+            
+            // adding an edge may create a new triangle
+            // 1) get all the points connected to A
+            // 2) get all the points connected to B
+            // 3) compare - if any overlap points P, A-B-P forms a triangle
 
-            // TODO: we must determine what new triangles this creates and add those also
+            HashSet<int> pointsFromB = m_lookups.GetConnectedPoints(edge.B.ID);
 
+            foreach (int pointFromA in m_lookups.GetConnectedPoints(edge.A.ID))
+            {
+                if (pointsFromB.Contains(pointFromA))
+                {
+                    Triangle triangle = new Triangle(edge, m_lookups.GetEdge(edge.B.ID, pointFromA), m_lookups.GetEdge(pointFromA, edge.A.ID));
+
+                    m_hashes.AddTriangle(triangle);
+                    m_lookups.AddTriangle(triangle);
+                }
+            }
         }
-
+        
         /// <summary>
         /// Add a new edge connecting point A to point B.
         /// </summary>
         public void AddEdge(Point a, Point b)
         {
             AddEdge(new Edge(a, b));
+        }
+
+        /// <summary>
+        /// Add a new edge connecting point A to point B.
+        /// </summary>
+        public void AddEdge(Vector3 a, Vector3 b)
+        {
+            AddEdge(new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), m_lookups.GetExistingPointInSameLocation(b.ToPoint())));
+        }
+
+        /// <summary>
+        /// Add a new edge connecting point A to point B.
+        /// </summary>
+        public void AddEdge(Point a, Vector3 b)
+        {
+            AddEdge(new Edge(a, m_lookups.GetExistingPointInSameLocation(b.ToPoint())));
+        }
+
+        /// <summary>
+        /// Add a new edge connecting point A to point B.
+        /// </summary>
+        public void AddEdge(Vector3 a, Point b)
+        {
+            AddEdge(new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), b));
         }
 
         /// <summary>
@@ -141,7 +191,7 @@ namespace Simplex
 
             AddEdge(a, b);
         }
-
+        
         /// <summary>
         /// Get the point with the given index.
         /// </summary>
@@ -156,11 +206,10 @@ namespace Simplex
         public Edge GetEdge(int aIndex, int bIndex)
         {
             Debug.Assert(m_hashes.HasPoint(aIndex) && m_hashes.HasPoint(bIndex), "Both points A and B must be in the Morph.");
-
-            Point a = m_hashes.GetPoint(aIndex);
+            
             Point b = m_hashes.GetPoint(bIndex);
 
-            foreach (Edge edge in m_lookups.EdgesFromPoint(a))
+            foreach (Edge edge in m_lookups.EdgesContaining(aIndex))
                 if (edge.Contains(b))
                     return edge;
 
@@ -172,12 +221,15 @@ namespace Simplex
         /// </summary>
         public IEnumerable<Point> GetConnectedPoints(Point point)
         {
-            Point opposite;
-            foreach (Edge edge in m_lookups.EdgesFromPoint(point))
-            {
-                if (edge.TryGetOpposite(point, out opposite))
-                    yield return opposite;
-            }
+            //Point opposite;
+            //foreach (Edge edge in m_lookups.ConnectedPoints(point))
+            //{
+            //    if (edge.TryGetOpposite(point, out opposite))
+            //        yield return opposite;
+            //}
+
+            foreach (int connected in m_lookups.ConnectedPoints(point.ID))
+                yield return m_hashes.GetPoint(connected);
         }
 
         /// <summary>
@@ -194,46 +246,46 @@ namespace Simplex
                 yield return connected;
         }
 
-        /// <summary>
-        /// Tries to determine whether it's possible to draw a path from point A to 
-        /// point B.
-        /// </summary>
-        public bool AreConnected(Point a, Point b)
-        {
-            Debug.Assert(m_hashes.HasPoint(a) && m_hashes.HasPoint(b), "Both points A and B must be in the Morph.");
+        ///// <summary>
+        ///// Tries to determine whether it's possible to draw a path from point A to 
+        ///// point B.
+        ///// </summary>
+        //public bool AreConnected(Point a, Point b)
+        //{
+        //    Debug.Assert(m_hashes.HasPoint(a) && m_hashes.HasPoint(b), "Both points A and B must be in the Morph.");
 
-            HashSet<Point> seen = new HashSet<Point>();
+        //    HashSet<Point> seen = new HashSet<Point>();
 
-            return AreConnected_Internal(a, b, ref seen);
-        }
+        //    return AreConnected_Internal(a, b, ref seen);
+        //}
 
-        /// <summary>
-        /// Tries to determine whether it's possible to draw a path from point A to 
-        /// point B.
-        /// 
-        /// (Internal method which includes the hashset for remembering where you've been.)
-        /// </summary>
-        private bool AreConnected_Internal(Point a, Point b, ref HashSet<Point> seen)
-        {
-            foreach (Edge edge in m_lookups.EdgesFromPoint(a))
-                if (edge.Contains(b))
-                    return true;
+        ///// <summary>
+        ///// Tries to determine whether it's possible to draw a path from point A to 
+        ///// point B.
+        ///// 
+        ///// (Internal method which includes the hashset for remembering where you've been.)
+        ///// </summary>
+        //private bool AreConnected_Internal(Point a, Point b, ref HashSet<Point> seen)
+        //{
+        //    foreach (int connected in m_lookups.ConnectedPoints(a.ID))
+        //        if (edge.Contains(connected))
+        //            return true;
 
-            foreach (Edge edge in m_lookups.EdgesFromPoint(a))
-            {
-                Point nextPoint;
+        //    foreach (Edge edge in m_lookups.ConnectedPoints(a))
+        //    {
+        //        Point nextPoint;
 
-                if (edge.TryGetOpposite(a, out nextPoint))
-                {
-                    if (!seen.Contains(a) && AreConnected_Internal(nextPoint, b, ref seen))
-                        return true;
-                }
-            }
+        //        if (edge.TryGetOpposite(a, out nextPoint))
+        //        {
+        //            if (!seen.Contains(a) && AreConnected_Internal(nextPoint, b, ref seen))
+        //                return true;
+        //        }
+        //    }
 
-            seen.Add(a);
+        //    seen.Add(a);
 
-            return false;
-        }
+        //    return false;
+        //}
 
 #if UNITY_EDITOR
         public void DrawGizmo()
@@ -302,11 +354,6 @@ namespace Simplex
                 return Position.HashVector3();
             }
 
-            public static implicit operator Point(Vector3 vec)
-            {
-                return new Point(vec);
-            }
-
             public override string ToString()
             {
                 return "[" + ID + "] " + Position.ToString();
@@ -361,6 +408,14 @@ namespace Simplex
             public bool Contains(Point point)
             {
                 return A == point || B == point;
+            }
+
+            /// <summary>
+            /// Returns whether the given point index is on this edge.
+            /// </summary>
+            public bool Contains(int id)
+            {
+                return A.ID == id || B.ID == id;
             }
 
             /// <summary>
@@ -605,8 +660,7 @@ namespace Simplex
                 if (!m_points.ContainsKey(point.ID))
                 {
                     ++m_highestPointIndex;
-
-                    Debug.Log("Adding " + point.ID + " | " + point.ToString());
+                    
                     m_points.Add(point.ID, point);
                 }
             }
@@ -688,43 +742,84 @@ namespace Simplex
         {
             private Dictionary<int, HashSet<Point>> m_pointsByLocation = new Dictionary<int, HashSet<Point>>();
 
+            private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
+
             private Dictionary<int, HashSet<Edge>> m_edges = new Dictionary<int, HashSet<Edge>>();
+
             private Dictionary<int, HashSet<Triangle>> m_triangles = new Dictionary<int, HashSet<Triangle>>();
             private Dictionary<int, HashSet<Face>> m_faces = new Dictionary<int, HashSet<Face>>();
 
             public void AddEdge(Edge edge)
             {
-                foreach (Point point in edge.Points)
-                {
-                    if (!m_edges.ContainsKey(point.ID))
-                        m_edges.Add(point.ID, new HashSet<Edge>());
+                if (!m_connectedPoints.ContainsKey(edge.A.ID))
+                    m_connectedPoints.Add(edge.A.ID, new HashSet<int>());
+                
+                m_connectedPoints[edge.A.ID].Add(edge.B.ID);
+                
+                if (!m_connectedPoints.ContainsKey(edge.B.ID))
+                    m_connectedPoints.Add(edge.B.ID, new HashSet<int>());
+                
+                m_connectedPoints[edge.B.ID].Add(edge.A.ID);
+                
+                if (!m_edges.ContainsKey(edge.A.ID))
+                    m_edges.Add(edge.A.ID, new HashSet<Edge>());
 
-                    foreach (Edge addedEdge in m_edges[point.ID])
-                    {
+                m_edges[edge.A.ID].Add(edge);
 
-                    }
+                if (!m_edges.ContainsKey(edge.B.ID))
+                    m_edges.Add(edge.B.ID, new HashSet<Edge>());
 
-                    m_edges[edge.A.ID].Add(edge);
-                }
+                m_edges[edge.B.ID].Add(edge);
             }
 
             public void DebugPrint()
             {
-                foreach (KeyValuePair<int, HashSet<Edge>> kvp in m_edges)
+                foreach (KeyValuePair<int, HashSet<int>> kvp in m_connectedPoints)
                 {
                     Debug.Log(kvp.Key);
 
-                    foreach (Edge edge in kvp.Value)
+                    foreach (int other in kvp.Value)
                     {
-                        Debug.Log("-----> [" + edge.A.ID + ", " + edge.B.ID + "]");
+                        Debug.Log("-----> [" + kvp.Key + ", " + other + "]");
                     }
                 }
             }
 
-            public IEnumerable<Edge> EdgesFromPoint(Point point)
+            public IEnumerable<int> ConnectedPoints(int id)
             {
-                foreach (Edge edge in m_edges[point.ID])
+                if (!m_connectedPoints.ContainsKey(id))
+                    yield break;
+
+                foreach (int connected in m_connectedPoints[id])
+                    yield return connected;
+            }
+
+            public HashSet<int> GetConnectedPoints(int id)
+            {
+                if (!m_connectedPoints.ContainsKey(id))
+                    return null;
+
+                // TODO: read only hashset?
+
+                return m_connectedPoints[id];
+            }
+
+            public IEnumerable<Edge> EdgesContaining(int id)
+            {
+                if (!m_edges.ContainsKey(id))
+                    yield break;
+
+                foreach (Edge edge in m_edges[id])
                     yield return edge;
+            }
+
+            public Edge GetEdge(int a, int b)
+            {
+                foreach (Edge edge in EdgesContaining(a))
+                    if (edge.Contains(b))
+                        return edge;
+
+                return null;
             }
 
             public void AddTriangle(Triangle triangle)
@@ -793,6 +888,27 @@ namespace Simplex
 
                 return point;
             }
+        }
+
+        #endregion
+    }
+
+    public static partial class Graph
+    {
+        #region Helper
+
+        /// <summary>
+        /// Convert a Vector3 instance to a point.
+        /// 
+        /// Remember that calling this on identical vectors will yield different point
+        /// instances. If you want these points to be treated as distinct by the Morph,
+        /// that's fine. If you want the Morph to collapse multiple instances of the given Vector3
+        /// into one point, then you should cache a reference to the instance produced by this method
+        /// for re-use.
+        /// </summary>
+        public static Morph.Point ToPoint(this Vector3 vec)
+        {
+            return new Morph.Point(vec);
         }
 
         #endregion
