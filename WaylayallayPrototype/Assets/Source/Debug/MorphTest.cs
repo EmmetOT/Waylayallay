@@ -29,33 +29,39 @@ public class MorphTest : MonoBehaviour
     [SerializeField]
     private MeshFilter m_testMesh;
 
-    [Button]
-    private void TestHashCodeMethod()
-    {
-        for (int i = 0; i < 10; i++)
-        {
-            for (int j = 0; j < 10; j++)
-            {
-                int hash;
-                if (i > j)
-                {
-                    hash = 32768 * i + j;
-                }
-                else
-                {
-                    hash = 32768 * j + i;
-                }
-
-                Debug.Log("[" + i + ", " + j + "] = " + hash);
-            }
-        }
-    }
+    [SerializeField]
+    private MeshFilter m_resultMeshFilter;
 
     [Button]
     public void CreateMorphFromMesh()
     {
         m_morph = new Morph(m_testMesh);
         m_testMesh.gameObject.SetActive(false);
+
+        Mesh mesh = m_morph.ToMesh();
+
+        //Debug.Log("BEFORE:");
+        //Debug.Log(m_testMesh.sharedMesh.vertices.Length);
+        //Debug.Log(m_testMesh.sharedMesh.triangles.Length);
+
+        //Debug.Log("AFTER:");
+        //Debug.Log(mesh.vertices.Length);
+        //Debug.Log(mesh.triangles.Length);
+
+        m_resultMeshFilter.sharedMesh = mesh;
+        m_resultMeshFilter.gameObject.SetActive(true);
+
+        int[] triangles = mesh.triangles;
+        Vector3[] vertices = mesh.vertices;
+
+        for (int i = 0; i < triangles.Length; i += 3)
+        {
+            Debug.Log(i);
+            Debug.Log(vertices[i]);
+            Debug.Log(vertices[(i + 1) % vertices.Length]);
+            Debug.Log(vertices[(i + 2) % vertices.Length]);
+            Debug.Log("----------------");
+        }
     }
 
     [Button]

@@ -18,11 +18,11 @@ namespace Simplex
     {
         private Hashes m_hashes = new Hashes();
         private Lookups m_lookups = new Lookups();
-
+        
         public Morph() { }
 
         public Morph(MeshFilter meshFilter) : this(meshFilter.sharedMesh) { }
-
+        
         public Morph(Mesh mesh)
         {
             int[] triangles = mesh.triangles;
@@ -30,7 +30,6 @@ namespace Simplex
             Vector2[] uvs = mesh.uv;
             Vector3[] normals = mesh.normals;
             Vector4[] tangents = mesh.tangents;
-
             int indexA, indexB, indexC;
             Point a, b, c;
 
@@ -61,9 +60,54 @@ namespace Simplex
 
         public Mesh ToMesh()
         {
-            return null;
-        }
+            Mesh mesh = new Mesh();
+            
+            int pointCount = m_hashes.PointCount;
+            Point[] points = new Point[pointCount];
+            Vector3[] vertices = new Vector3[pointCount];
+            Vector2[] uvs = new Vector2[pointCount];
+            Vector3[] normals = new Vector3[pointCount];
+            Vector4[] tangents = new Vector4[pointCount];
 
+            int i = 0;
+            foreach (Point point in m_hashes.Points)
+            {
+                points[i] = point;
+                vertices[i] = point.Position;
+                uvs[i] = point.UV;
+                normals[i] = point.Normal;
+                tangents[i] = point.Tangent;
+
+                ++i;
+            }
+
+            int[] triangles = new int[m_hashes.TriangleCount];
+            i = 0;
+
+            foreach (Triangle triangle in m_hashes.Triangles)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    for (int k = 0; k < points.Length; k++)
+                    {
+                        if (points[j] == triangle[j])
+                        {
+                            triangles[i++] = k;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.normals = normals;
+            mesh.tangents = tangents;
+            mesh.triangles = triangles;
+
+            return mesh;
+        }
+        
         public IEnumerable<Point> Points
         {
             get
@@ -87,9 +131,18 @@ namespace Simplex
             if (c.ID == -1)
                 m_hashes.AddPoint(c);
 
-            AddEdge(new Edge(a, b));
-            AddEdge(new Edge(b, c));
-            AddEdge(new Edge(c, a));
+            Edge ab = new Edge(a, b);
+            Edge bc = new Edge(b, c);
+            Edge ca = new Edge(c, a);
+            
+            AddEdge(ab, findNewTriangles: false);
+            AddEdge(bc, findNewTriangles: false);
+            AddEdge(ca, findNewTriangles: false);
+
+            Triangle triangle = new Triangle(ab, bc, ca, a, b, c);
+
+            m_hashes.AddTriangle(triangle);
+            m_lookups.AddTriangle(triangle);
         }
 
         /// <summary>
@@ -117,10 +170,8 @@ namespace Simplex
 
         /// <summary>
         /// Add a new edge connecting point A to point B.
-        /// 
-        /// If this
         /// </summary>
-        public void AddEdge(Edge edge)
+        public void AddEdge(Edge edge, bool findNewTriangles = true)
         {
             if (m_hashes.HasEdge(edge))
             {
@@ -144,21 +195,24 @@ namespace Simplex
 
             m_lookups.AddEdge(edge);
 
-            // adding an edge may create a new triangle
-            // 1) get all the points connected to A
-            // 2) get all the points connected to B
-            // 3) compare - if any overlap points P, A-B-P forms a triangle
-
-            HashSet<int> pointsFromB = m_lookups.GetConnectedPoints(edge.B.ID);
-
-            foreach (int pointFromA in m_lookups.GetConnectedPoints(edge.A.ID))
+            if (findNewTriangles)
             {
-                if (pointsFromB.Contains(pointFromA))
-                {
-                    Triangle triangle = new Triangle(edge, m_lookups.GetEdge(edge.B.ID, pointFromA), m_lookups.GetEdge(pointFromA, edge.A.ID));
+                // adding an edge may create a new triangle
+                // 1) get all the points connected to A
+                // 2) get all the points connected to B
+                // 3) compare - if any overlap points P, A-B-P forms a triangle
 
-                    m_hashes.AddTriangle(triangle);
-                    m_lookups.AddTriangle(triangle);
+                HashSet<int> pointsFromB = m_lookups.GetConnectedPoints(edge.B.ID);
+
+                foreach (int pointFromA in m_lookups.GetConnectedPoints(edge.A.ID))
+                {
+                    if (pointsFromB.Contains(pointFromA))
+                    {
+                        Triangle triangle = new Triangle(edge, m_lookups.GetEdge(edge.B.ID, pointFromA), m_lookups.GetEdge(pointFromA, edge.A.ID));
+
+                        m_hashes.AddTriangle(triangle);
+                        m_lookups.AddTriangle(triangle);
+                    }
                 }
             }
         }
@@ -166,12 +220,12 @@ namespace Simplex
         /// <summary>
         /// Add a new edge connecting point A to point B.
         /// </summary>
-        public Edge AddEdge(Point a, Point b)
+        public Edge AddEdge(Point a, Point b, bool findNewTriangles = true)
         {
             Assert.AreNotEqual(a.Position, b.Position);
 
             Edge edge = new Edge(a, b);
-            AddEdge(edge);
+            AddEdge(edge, findNewTriangles);
 
             return edge;
         }
@@ -179,12 +233,12 @@ namespace Simplex
         /// <summary>
         /// Add a new edge connecting point A to point B.
         /// </summary>
-        public Edge AddEdge(Vector3 a, Vector3 b)
+        public Edge AddEdge(Vector3 a, Vector3 b, bool findNewTriangles = true)
         {
             Assert.AreNotEqual(a, b);
 
             Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
-            AddEdge(edge);
+            AddEdge(edge, findNewTriangles);
 
             return edge;
         }
@@ -192,12 +246,12 @@ namespace Simplex
         /// <summary>
         /// Add a new edge connecting point A to point B.
         /// </summary>
-        public Edge AddEdge(Point a, Vector3 b)
+        public Edge AddEdge(Point a, Vector3 b, bool findNewTriangles = true)
         {
             Assert.AreNotEqual(a.Position, b);
 
             Edge edge = new Edge(a, m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
-            AddEdge(edge);
+            AddEdge(edge, findNewTriangles);
 
             return edge;
         }
@@ -205,12 +259,12 @@ namespace Simplex
         /// <summary>
         /// Add a new edge connecting point A to point B.
         /// </summary>
-        public Edge AddEdge(Vector3 a, Point b)
+        public Edge AddEdge(Vector3 a, Point b, bool findNewTriangles = true)
         {
             Assert.AreNotEqual(a, b.Position);
 
             Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), b);
-            AddEdge(edge);
+            AddEdge(edge, findNewTriangles);
 
             return edge;
         }
@@ -218,11 +272,11 @@ namespace Simplex
         /// <summary>
         /// Add a new edge connecting the points at the given indices.
         /// </summary>
-        public Edge AddEdge(int aIndex, int bIndex)
+        public Edge AddEdge(int aIndex, int bIndex, bool findNewTriangles = true)
         {
             Debug.Assert(m_hashes.HasPoint(aIndex) && m_hashes.HasPoint(bIndex), "Both points A and B must be in the Morph.");
 
-            return AddEdge(m_hashes.GetPoint(aIndex), m_hashes.GetPoint(bIndex));
+            return AddEdge(m_hashes.GetPoint(aIndex), m_hashes.GetPoint(bIndex), findNewTriangles);
         }
 
         /// <summary>
@@ -639,14 +693,27 @@ namespace Simplex
 
                 Debug.Assert((A.Position != B.Position) && (B.Position != C.Position) && (C.Position != A.Position), "Can't have a triangle where two or more points are equal!");
 
-                Debug.Log("Created triangle connecting " + ab.ToString() + ", " + bc.ToString() + ", " + ca.ToString() + ", whose centroid is " + Centroid + ", and whose normal is " + Normal);
-                Debug.Log("A = " + A.Position);
-                Debug.Log("B = " + B.Position);
-                Debug.Log("C = " + C.Position);
+                //Debug.Log("Created triangle connecting " + ab.ToString() + ", " + bc.ToString() + ", " + ca.ToString() + ", whose centroid is " + Centroid + ", and whose normal is " + Normal);
+                //Debug.Log("A = " + A.Position);
+                //Debug.Log("B = " + B.Position);
+                //Debug.Log("C = " + C.Position);
 
-                Debug.Log(AB.ToString() + " points are: " + AB.A.Position + " and " + AB.B.Position);
-                Debug.Log(BC.ToString() + " points are: " + BC.A.Position + " and " + BC.B.Position);
-                Debug.Log(CA.ToString() + " points are: " + CA.A.Position + " and " + CA.B.Position);
+                //Debug.Log(AB.ToString() + " points are: " + AB.A.Position + " and " + AB.B.Position);
+                //Debug.Log(BC.ToString() + " points are: " + BC.A.Position + " and " + BC.B.Position);
+                //Debug.Log(CA.ToString() + " points are: " + CA.A.Position + " and " + CA.B.Position);
+            }
+
+            public Triangle(Edge ab, Edge bc, Edge ca, Point a, Point b, Point c)
+            {
+                AB = ab;
+                BC = bc;
+                CA = ca;
+
+                A = a;
+                B = b;
+                C = c;
+
+                Debug.Assert((A.Position != B.Position) && (B.Position != C.Position) && (C.Position != A.Position), "Can't have a triangle where two or more points are equal!");
             }
 
             /// <summary>
@@ -770,6 +837,14 @@ namespace Simplex
 
             private int m_highestPointIndex = 0;
 
+            public int PointCount
+            {
+                get
+                {
+                    return m_points.Count;
+                }
+            }
+
             public IEnumerable<Point> Points
             {
                 get
@@ -785,6 +860,14 @@ namespace Simplex
                 {
                     foreach (Edge edge in m_edges)
                         yield return edge;
+                }
+            }
+
+            public int TriangleCount
+            {
+                get
+                {
+                    return m_triangles.Count;
                 }
             }
 
