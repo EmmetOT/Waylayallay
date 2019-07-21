@@ -97,10 +97,10 @@ public class MorphTest : MonoBehaviour
     [Button]
     private void Flip()
     {
-        if (m_morph == null)
-            return;
-
+        m_morph = new Morph(m_testMesh, m_collapseColocatedPoints);
+        m_testMesh.gameObject.SetActive(false);
         m_morph.FlipNormals();
+        m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
     }
 
     [Button]

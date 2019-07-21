@@ -37,6 +37,7 @@ namespace Simplex
             Vector2[] uvs = mesh.uv;
             Vector3[] normals = mesh.normals;
             Vector4[] tangents = mesh.tangents;
+
             int indexA, indexB, indexC;
             Point a, b, c;
 
@@ -676,9 +677,9 @@ namespace Simplex
                     if (i == 0)
                         return A;
                     else if (i == 1)
-                        return B;
+                        return m_flippedNormal ? C : B;
 
-                    return C;
+                    return m_flippedNormal ? B : C;
                 }
             }
 
@@ -686,9 +687,18 @@ namespace Simplex
             {
                 get
                 {
-                    yield return A;
-                    yield return B;
-                    yield return C;
+                    if (m_flippedNormal)
+                    {
+                        yield return A;
+                        yield return B;
+                        yield return C;
+                    }
+                    else
+                    {
+                        yield return A;
+                        yield return C;
+                        yield return B;
+                    }
                 }
             }
 
@@ -990,6 +1000,7 @@ namespace Simplex
             private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
 
             private Dictionary<int, HashSet<Edge>> m_edges = new Dictionary<int, HashSet<Edge>>();
+            private Dictionary<int, HashSet<Edge>> m_virtualEdges = new Dictionary<int, HashSet<Edge>>();
 
             private Dictionary<int, HashSet<Triangle>> m_triangles = new Dictionary<int, HashSet<Triangle>>();
             private Dictionary<int, HashSet<Face>> m_faces = new Dictionary<int, HashSet<Face>>();
@@ -1023,7 +1034,7 @@ namespace Simplex
 
                 m_edges[edge.B.ID].Add(edge);
             }
-
+            
             public IEnumerable<int> ConnectedPoints(int id)
             {
                 if (!m_connectedPoints.ContainsKey(id))
