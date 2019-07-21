@@ -62,39 +62,35 @@ namespace Simplex
         /// <summary>
         /// Add a new triangle connecting points a, b, and c.
         /// </summary>
-        public Triangle AddTriangle(Point a, Point b, Point c)
+        public void AddTriangle(Point a, Point b, Point c)
         {
-            Edge ab = new Edge(a, b);
-            Edge bc = new Edge(b, c);
-            Edge ca = new Edge(c, a);
+            if (a.ID == -1)
+                m_hashes.AddPoint(a);
+
+            if (b.ID == -1)
+                m_hashes.AddPoint(b);
+
+            if (c.ID == -1)
+                m_hashes.AddPoint(c);
             
-            AddEdge(ab);
-            AddEdge(bc);
-            AddEdge(ca);
-
-            Triangle triangle = new Triangle(ab, bc, ca);
-
-            m_hashes.AddTriangle(triangle);
-            m_lookups.AddTriangle(triangle);
-
-            return triangle;
+            AddEdge(new Edge(a, b));
+            AddEdge(new Edge(b, c));
+            AddEdge(new Edge(c, a));
         }
 
         /// <summary>
         /// Add a new triangle connecting points a, b, and c.
         /// </summary>
-        public Triangle AddTriangle(Vector3 a, Vector3 b, Vector3 c)
+        public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
         {
             Point pointA = m_lookups.GetExistingPointInSameLocation(a.ToPoint());
             Point pointB = m_lookups.GetExistingPointInSameLocation(b.ToPoint());
             Point pointC = m_lookups.GetExistingPointInSameLocation(c.ToPoint());
-
-            Debug.Log("Adding triangle - " + pointA.ID + "," + pointB.ID + ", " + pointC.ID);
-
-            return AddTriangle(pointA, pointB, pointC);
+            
+            AddTriangle(pointA, pointB, pointC);
         }
 
-        public Triangle AddTriangle(int a, int b, int c)
+        public void AddTriangle(int a, int b, int c)
         {
             Point pointA = m_hashes.GetPoint(a);
             Point pointB = m_hashes.GetPoint(b);
@@ -102,14 +98,24 @@ namespace Simplex
 
             Debug.Assert(pointA != null && pointB != null && pointC != null, "All three points used to make a triangle must be in the Morph.");
 
-            return AddTriangle(pointA, pointB, pointC);
+            AddTriangle(pointA, pointB, pointC);
         }
         
         /// <summary>
         /// Add a new edge connecting point A to point B.
+        /// 
+        /// If this
         /// </summary>
         public void AddEdge(Edge edge)
         {
+            if (m_hashes.HasEdge(edge))
+            {
+                Debug.Log("Already have the edge " + edge.ToString());
+                return;
+            }
+
+            Debug.Log("Adding edge " + edge.ToString());
+
             m_hashes.AddPoint(edge.A);
             m_hashes.AddPoint(edge.B);
             
@@ -210,7 +216,7 @@ namespace Simplex
             
             Point b = m_hashes.GetPoint(bIndex);
 
-            foreach (Edge edge in m_lookups.EdgesContaining(aIndex))
+            foreach (Edge edge in m_lookups.GetEdgesContaining(aIndex))
                 if (edge.Contains(b))
                     return edge;
 
@@ -245,6 +251,15 @@ namespace Simplex
 
             foreach (Point connected in GetConnectedPoints(point))
                 yield return connected;
+        }
+
+        /// <summary>
+        /// Flip the normals of all triangles of the morph.
+        /// </summary>
+        public void FlipNormals()
+        {
+            foreach (Triangle triangle in m_hashes.Triangles)
+                triangle.Flip();
         }
 
         ///// <summary>
@@ -293,6 +308,10 @@ namespace Simplex
         {
             foreach (Triangle triangle in m_hashes.Triangles)
                 triangle.DrawGizmo(Color.black, Color.black);
+
+            foreach (Edge edge in m_hashes.Edges)
+                if (!m_lookups.IsEdgeInTriangle(edge))
+                    edge.DrawGizmo(Color.red);
         }
 #endif
 
@@ -313,18 +332,10 @@ namespace Simplex
             public Vector3 Normal { get; private set; }
             public Vector4 Tangent { get; private set; }
 
-            private int m_id = -1;
-
             /// <summary>
             /// Used to uniquely identify a particular point object, even after transformations.
             /// </summary>
-            public int ID
-            {
-                get
-                {
-                    return m_id;
-                }
-            }
+            public int ID { get; private set; } = -1;
 
             public Point(Vector3 vector) : this(vector, Vector2.zero, Vector3.zero, Vector4.zero) { }
 
@@ -338,11 +349,12 @@ namespace Simplex
 
             /// <summary>
             /// Set the value used to uniquely identify this point. Should not change over the lifetime
-            /// of the object.
+            /// of the point.
             /// </summary>
             public void SetID(int id)
             {
-                m_id = id;
+                Debug.Log("Setting id to " + id);
+                ID = id;
             }
 
             /// <summary>
@@ -372,7 +384,13 @@ namespace Simplex
                     handleStyle.normal.textColor = Color.white;
                     handleStyle.fontSize = 30;
 
-                    Handles.Label(Position + Vector3.one * 0.2f, ID.ToString(), handleStyle);
+                    Handles.Label(Position + Vector3.up * 0.2f, ID.ToString(), handleStyle);
+
+                    handleStyle = new GUIStyle();
+                    handleStyle.normal.textColor = Color.black;
+                    handleStyle.fontSize = 10;
+
+                    Handles.Label(Position + Vector3.up * 0.3f, Position.ToString(), handleStyle);
                 }
 #endif
             }
@@ -441,9 +459,31 @@ namespace Simplex
                 output = null;
                 return false;
             }
-            
+
+            public override string ToString()
+            {
+                return "[" + A.ID + " to " + B.ID + "]";
+            }
+
+            public override int GetHashCode()
+            {
+                int hash = 17;
+                hash += A.ID * 997;
+                hash += B.ID * 997;
+
+                return hash;
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (!(obj is Edge other))
+                    return false;
+
+                return GetHashCode() == other.GetHashCode();
+            }
+
 #if UNITY_EDITOR
-            public void DrawGizmo(Color pointCol, Color edgeCol, float radius = 0.05f)
+            public void DrawGizmo(Color pointCol, Color edgeCol, float radius = 0.05f, bool label = true)
             {
                 Gizmos.color = edgeCol;
                 Gizmos.DrawLine(A.Position, B.Position);
@@ -452,10 +492,9 @@ namespace Simplex
                 B.DrawGizmo(pointCol, radius);
             }
 
-            public void DrawGizmo(Color edgeCol)
+            public void DrawGizmo(Color edgeCol, float radius = 0.05f, bool label = true)
             {
-                Gizmos.color = edgeCol;
-                Gizmos.DrawLine(A.Position, B.Position);
+                DrawGizmo(edgeCol, edgeCol, radius, label);
             }
 #endif
         }
@@ -475,6 +514,8 @@ namespace Simplex
             public Point B { get { return AB.B; } }
             public Point C { get { return BC.B; } }
 
+            private bool m_flippedNormal = false;
+
             public Vector3 Normal
             {
                 get
@@ -482,10 +523,7 @@ namespace Simplex
                     Vector3 side1 = B.Position - A.Position;
                     Vector3 side2 = C.Position - A.Position;
 
-                    if (B.ID > C.ID)
-                        return Vector3.Cross(side2, side1).normalized;
-                    else
-                        return Vector3.Cross(side1, side2).normalized;
+                    return Vector3.Cross(side1, side2).normalized * (m_flippedNormal ? -1 : 1);
                 }
             }
 
@@ -559,7 +597,7 @@ namespace Simplex
                 BC = bc;
                 CA = ca;
 
-                
+                Debug.Log("Created triangle connecting " + ab.ToString() + ", " + bc.ToString() + ", " + ca.ToString());
             }
 
             /// <summary>
@@ -593,6 +631,14 @@ namespace Simplex
                 return Normal == triangle.Normal;
             }
 
+            /// <summary>
+            /// Reverse the normal of this triangle.
+            /// </summary>
+            public void Flip()
+            {
+                m_flippedNormal = !m_flippedNormal;
+            }
+
 #if UNITY_EDITOR
             public void DrawGizmo(Color pointCol, Color edgeCol, float radius = 0.05f)
             {
@@ -604,7 +650,6 @@ namespace Simplex
 
                 Gizmos.color = edgeCol;
                 Gizmos.DrawLine(Centroid, Centroid + Normal);
-
             }
 #endif
         }
@@ -642,7 +687,7 @@ namespace Simplex
                 throw new System.NotImplementedException();
             }
 
-            public bool IsContinguous(Face face)
+            public bool IsContiguous(Face face)
             {
                 throw new System.NotImplementedException();
             }
@@ -712,6 +757,8 @@ namespace Simplex
 
                 if (!m_points.ContainsKey(point.ID))
                 {
+                    Debug.Log("Adding point " + point.ID + " at " + point.Position);
+
                     ++m_highestPointIndex;
                     
                     m_points.Add(point.ID, point);
@@ -844,7 +891,7 @@ namespace Simplex
                 return m_connectedPoints[id];
             }
 
-            public IEnumerable<Edge> EdgesContaining(int id)
+            public IEnumerable<Edge> GetEdgesContaining(int id)
             {
                 if (!m_edges.ContainsKey(id))
                     yield break;
@@ -853,9 +900,14 @@ namespace Simplex
                     yield return edge;
             }
 
+            public IEnumerable<Edge> GetEdgesContaining(Point point)
+            {
+                return GetEdgesContaining(point.ID);
+            }
+
             public Edge GetEdge(int a, int b)
             {
-                foreach (Edge edge in EdgesContaining(a))
+                foreach (Edge edge in GetEdgesContaining(a))
                     if (edge.Contains(b))
                         return edge;
 
@@ -878,10 +930,18 @@ namespace Simplex
                 }
             }
 
-            public IEnumerable<Triangle> TrianglesFromPoint(Point point)
+            public IEnumerable<Triangle> GetTrianglesContaining(Point point)
             {
                 foreach (Triangle triangle in m_triangles[point.ID])
                     yield return triangle;
+            }
+
+            /// <summary>
+            /// Returns whether there are any triangles in the morph with the given edge.
+            /// </summary>
+            public bool IsEdgeInTriangle(Edge edge)
+            {
+                return m_triangles.ContainsKey(edge.A.ID) || m_triangles.ContainsKey(edge.B.ID);
             }
 
             public void AddPoint(Point point)
@@ -897,7 +957,9 @@ namespace Simplex
             /// <summary>
             /// This method needs to be called whenever a point moves in the mesh.
             /// 
-            /// TODO: PROBABLY DELETE OR HUGELY OPTIMIZE
+            /// TODO: PROBABLY DELETE OR HUGELY OPTIMIZE- Possibly by dirtying points when moved
+            /// and then only moving the dirty ones in this method
+            /// TODO: This needs to be called whenever a point position is changed
             /// </summary>
             public void RegeneratePointByLocationLookup()
             {
@@ -921,11 +983,11 @@ namespace Simplex
             {
                 int locationID = point.GetLocationID();
 
+                // points already exist at given location. return one arbitrarily.
                 if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
-                {
                     return m_pointsByLocation[locationID].First();
-                }
 
+                // point is at a new location so it's ok to use
                 return point;
             }
         }
@@ -952,13 +1014,5 @@ namespace Simplex
         }
 
         #endregion
-    }
-
-    public class OrderedHashSet<T> : System.Collections.ObjectModel.KeyedCollection<T, T>
-    {
-        protected override T GetKeyForItem(T item)
-        {
-            return item;
-        }
     }
 }

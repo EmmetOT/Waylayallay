@@ -10,21 +10,45 @@ public class MorphTest : MonoBehaviour
 
     [SerializeField]
     private Morph m_morph;
-    
+
+    [SerializeField]
+    private Vector3 m_testVecA;
+
+    [SerializeField]
+    private Vector3 m_testVecB;
+
     [Button]
     private void CreateMesh()
     {
+        if (m_morph == null)
+            m_morph = new Morph();
+
+        m_morph.AddEdge(m_testVecA, m_testVecB);
+    }
+
+    [Button]
+    private void CreateForwardMesh()
+    {
         m_morph = new Morph();
 
-        Morph.Triangle t0 = m_morph.AddTriangle(new Vector3(0f, 1f, 0f), new Vector3(-1f, 0f, 0f), new Vector3(1f, 0f, 0f));
-        Morph.Triangle t1 = m_morph.AddTriangle(new Vector3(0f, -1f, 0f), new Vector3(1f, 0f, 0f), new Vector3(-1f, 0f, 0f));
+        m_morph.AddTriangle(new Vector3(0f, 1f, 0f), new Vector3(1f, 0f, 0f), new Vector3(-1f, 0f, 0f));
+    }
 
-        //m_morph.DebugMode = true;
-        
-        //m_morph.AddEdge(0, 3);
-        
-        //m_morph.AddEdge(m_morph.GetPoint(0), new Vector3(0.444f, 1f, 0.2f));
-        //m_morph.AddEdge(new Vector3(0.444f, 1f, 0.2f), m_morph.GetPoint(2));
+    [Button]
+    private void CreateBackwardMesh()
+    {
+        m_morph = new Morph();
+
+        m_morph.AddTriangle(new Vector3(0f, 1f, 0f), new Vector3(-1f, 0f, 0f), new Vector3(1f, 0f, 0f));
+    }
+
+    [Button]
+    private void Flip()
+    {
+        if (m_morph == null)
+            return;
+
+        m_morph.FlipNormals();
     }
 
     [Button]
