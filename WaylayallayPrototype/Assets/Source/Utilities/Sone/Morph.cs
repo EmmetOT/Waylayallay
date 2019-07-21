@@ -21,6 +21,8 @@ namespace Simplex
 
         public Morph() { }
 
+        public Morph(MeshFilter meshFilter) : this(meshFilter.sharedMesh) { }
+
         public Morph(Mesh mesh)
         {
             int[] triangles = mesh.triangles;
@@ -38,9 +40,9 @@ namespace Simplex
                 indexB = triangles[i + 1];
                 indexC = triangles[i + 2];
 
-                a = new Point(vertices[indexA], uvs[indexA], normals[indexA], tangents[indexA]);
-                b = new Point(vertices[indexB], uvs[indexB], normals[indexB], tangents[indexB]);
-                c = new Point(vertices[indexC], uvs[indexC], normals[indexC], tangents[indexC]);
+                a = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexA], uvs[indexA], normals[indexA], tangents[indexA]));
+                b = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexB], uvs[indexB], normals[indexB], tangents[indexB]));
+                c = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexC], uvs[indexC], normals[indexC], tangents[indexC]));
 
                 AddTriangle(a, b, c);
             }
@@ -67,10 +69,10 @@ namespace Simplex
         {
             if (a.ID == -1)
                 m_hashes.AddPoint(a);
-
+            
             if (b.ID == -1)
                 m_hashes.AddPoint(b);
-
+            
             if (c.ID == -1)
                 m_hashes.AddPoint(c);
             
@@ -84,10 +86,10 @@ namespace Simplex
         /// </summary>
         public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
         {
-            Point pointA = m_lookups.GetExistingPointInSameLocation(a.ToPoint());
-            Point pointB = m_lookups.GetExistingPointInSameLocation(b.ToPoint());
-            Point pointC = m_lookups.GetExistingPointInSameLocation(c.ToPoint());
-            
+            Point pointA = m_lookups.GetExistingPointInSameLocation(a);
+            Point pointB = m_lookups.GetExistingPointInSameLocation(b);
+            Point pointC = m_lookups.GetExistingPointInSameLocation(c);
+
             AddTriangle(pointA, pointB, pointC);
         }
 
@@ -110,13 +112,8 @@ namespace Simplex
         public void AddEdge(Edge edge)
         {
             if (m_hashes.HasEdge(edge))
-            {
-                Debug.Log("Already have the edge " + edge.ToString());
                 return;
-            }
-
-            Debug.Log("Adding edge " + edge.ToString());
-
+            
             m_hashes.AddPoint(edge.A);
             m_hashes.AddPoint(edge.B);
             
@@ -237,13 +234,6 @@ namespace Simplex
         /// </summary>
         public IEnumerable<Point> GetConnectedPoints(Point point)
         {
-            //Point opposite;
-            //foreach (Edge edge in m_lookups.ConnectedPoints(point))
-            //{
-            //    if (edge.TryGetOpposite(point, out opposite))
-            //        yield return opposite;
-            //}
-
             foreach (int connected in m_lookups.ConnectedPoints(point.ID))
                 yield return m_hashes.GetPoint(connected);
         }
@@ -356,6 +346,14 @@ namespace Simplex
             /// </summary>
             public int ID { get; private set; } = -1;
 
+            public bool HasDataOtherThanPosition
+            {
+                get
+                {
+                    return UV != Vector2.zero || Normal != Vector3.zero || Tangent != Vector4.zero;
+                }
+            }
+
             public Point(Vector3 vector) : this(vector, Vector2.zero, Vector3.zero, Vector4.zero) { }
 
             public Point(Vector3 vector, Vector2 uv, Vector3 normal, Vector4 tangent)
@@ -372,8 +370,17 @@ namespace Simplex
             /// </summary>
             public void SetID(int id)
             {
-                Debug.Log("Setting id to " + id);
                 ID = id;
+            }
+
+            /// <summary>
+            /// Take the normal, uv, and tangent data from the other point.
+            /// </summary>
+            public void CopyNonPositionData(Point other)
+            {
+                UV = other.UV;
+                Normal = other.Normal;
+                Tangent = other.Tangent;
             }
 
             /// <summary>
@@ -615,8 +622,6 @@ namespace Simplex
                 AB = ab;
                 BC = bc;
                 CA = ca;
-
-                Debug.Log("Created triangle connecting " + ab.ToString() + ", " + bc.ToString() + ", " + ca.ToString());
             }
 
             /// <summary>
@@ -776,8 +781,6 @@ namespace Simplex
 
                 if (!m_points.ContainsKey(point.ID))
                 {
-                    Debug.Log("Adding point " + point.ID + " at " + point.Position);
-
                     ++m_highestPointIndex;
                     
                     m_points.Add(point.ID, point);
@@ -997,17 +1000,43 @@ namespace Simplex
             /// <summary>
             /// If we already have a point object in the exact same location as the given point object,
             /// return it. Else return the given point back.
+            /// 
+            /// If the given point has data such as UV, Tangent, or Normal, you can optionally make the returned point
+            /// (if it already existed after all) copy this data onto itself. This defaults to true.
             /// </summary>
-            public Point GetExistingPointInSameLocation(Point point)
+            public Point GetExistingPointInSameLocation(Point point, bool copyDataFromGivenPoint = true)
             {
                 int locationID = point.GetLocationID();
+
+                // points already exist at given location. return one arbitrarily.
+                if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
+                {
+                    Point existing = m_pointsByLocation[locationID].First();
+
+                    if (copyDataFromGivenPoint && point.HasDataOtherThanPosition)
+                        existing.CopyNonPositionData(point);
+
+                    return existing;
+                }
+
+                // point is at a new location so it's ok to use
+                return point;
+            }
+
+            /// <summary>
+            /// If we already have a point object in the exact same location as the given vector,
+            /// return it. Else return the given point back.
+            /// </summary>
+            public Point GetExistingPointInSameLocation(Vector3 vec)
+            {
+                int locationID = vec.HashVector3();
 
                 // points already exist at given location. return one arbitrarily.
                 if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
                     return m_pointsByLocation[locationID].First();
 
                 // point is at a new location so it's ok to use
-                return point;
+                return vec.ToPoint();
             }
         }
 

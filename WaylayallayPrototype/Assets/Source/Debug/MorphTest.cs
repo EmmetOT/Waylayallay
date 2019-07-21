@@ -9,6 +9,9 @@ public class MorphTest : MonoBehaviour
     private bool m_initialized = false;
 
     [SerializeField]
+    private bool m_drawGizmos = false;
+
+    [SerializeField]
     private Morph m_morph;
 
     [SerializeField]
@@ -22,6 +25,16 @@ public class MorphTest : MonoBehaviour
 
     [SerializeField]
     private int m_connectedQueryTwo;
+
+    [SerializeField]
+    private MeshFilter m_testMesh;
+
+    [Button]
+    public void CreateMorphFromMesh()
+    {
+        m_morph = new Morph(m_testMesh);
+        m_testMesh.gameObject.SetActive(false);
+    }
 
     [Button]
     private void CreateMesh()
@@ -75,9 +88,15 @@ public class MorphTest : MonoBehaviour
         m_morph.GetPoint(0).Position += Vector3.right * 0.1f;
     }
 
+    private void Update()
+    {
+        if (Input.GetKeyUp(KeyCode.Q))
+            CreateMorphFromMesh();
+    }
+
     private void OnDrawGizmos()
     {
-        if (m_morph == null)
+        if (m_morph == null || !m_drawGizmos)
             return;
 
         m_morph.DrawGizmo();
