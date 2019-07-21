@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using System.Linq;
+using UnityEngine.Assertions;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -150,6 +151,8 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(Point a, Point b)
         {
+            Assert.AreNotEqual(a.Position, b.Position);
+
             Edge edge = new Edge(a, b);
             AddEdge(edge);
 
@@ -161,6 +164,8 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(Vector3 a, Vector3 b)
         {
+            Assert.AreNotEqual(a, b);
+            
             Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
             AddEdge(edge);
 
@@ -172,6 +177,8 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(Point a, Vector3 b)
         {
+            Assert.AreNotEqual(a.Position, b);
+
             Edge edge = new Edge(a, m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
             AddEdge(edge);
 
@@ -183,6 +190,8 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(Vector3 a, Point b)
         {
+            Assert.AreNotEqual(a, b.Position);
+
             Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), b);
             AddEdge(edge);
 
@@ -262,46 +271,56 @@ namespace Simplex
                 triangle.Flip();
         }
 
-        ///// <summary>
-        ///// Tries to determine whether it's possible to draw a path from point A to 
-        ///// point B.
-        ///// </summary>
-        //public bool AreConnected(Point a, Point b)
-        //{
-        //    Debug.Assert(m_hashes.HasPoint(a) && m_hashes.HasPoint(b), "Both points A and B must be in the Morph.");
+        /// <summary>
+        /// Tries to determine whether it's possible to draw a path from point A to 
+        /// point B, using a breadth-first-search.
+        /// </summary>
+        public bool IsConnected(Point a, Point b)
+        {
+            if (a == b)
+                return true;
 
-        //    HashSet<Point> seen = new HashSet<Point>();
+            return IsConnected(a.ID, b.ID);
+        }
 
-        //    return AreConnected_Internal(a, b, ref seen);
-        //}
+        /// <summary>
+        /// Tries to determine whether it's possible to draw a path from point A to 
+        /// point B, using a breadth-first-search.
+        /// </summary>
+        public bool IsConnected(int a, int b)
+        {
+            Debug.Assert(m_hashes.HasPoint(a) && m_hashes.HasPoint(b), "Both points A and B must be in the Morph.");
 
-        ///// <summary>
-        ///// Tries to determine whether it's possible to draw a path from point A to 
-        ///// point B.
-        ///// 
-        ///// (Internal method which includes the hashset for remembering where you've been.)
-        ///// </summary>
-        //private bool AreConnected_Internal(Point a, Point b, ref HashSet<Point> seen)
-        //{
-        //    foreach (int connected in m_lookups.ConnectedPoints(a.ID))
-        //        if (edge.Contains(connected))
-        //            return true;
+            if (a == b)
+                return true;
+            
+            Queue<int> queue = new Queue<int>();
+            HashSet<int> seen = new HashSet<int>();
 
-        //    foreach (Edge edge in m_lookups.ConnectedPoints(a))
-        //    {
-        //        Point nextPoint;
+            queue.Enqueue(a);
 
-        //        if (edge.TryGetOpposite(a, out nextPoint))
-        //        {
-        //            if (!seen.Contains(a) && AreConnected_Internal(nextPoint, b, ref seen))
-        //                return true;
-        //        }
-        //    }
+            while (queue.Count != 0)
+            {
+                int current = queue.Dequeue();
+                
+                // Get all connected points of the current point
+                // if a connected point has not been seen, then mark it seen 
+                // and enqueue it 
+                foreach (int connected in m_lookups.ConnectedPoints(current))
+                {
+                    if (connected == b)
+                        return true;
 
-        //    seen.Add(a);
+                    if (!seen.Contains(connected))
+                    {
+                        seen.Add(connected);
+                        queue.Enqueue(connected);
+                    }
+                }
+            }
 
-        //    return false;
-        //}
+            return false;
+        }
 
 #if UNITY_EDITOR
         public void DrawGizmo()

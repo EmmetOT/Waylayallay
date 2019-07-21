@@ -17,6 +17,12 @@ public class MorphTest : MonoBehaviour
     [SerializeField]
     private Vector3 m_testVecB;
 
+    [SerializeField]
+    private int m_connectedQueryOne;
+
+    [SerializeField]
+    private int m_connectedQueryTwo;
+
     [Button]
     private void CreateMesh()
     {
@@ -40,6 +46,15 @@ public class MorphTest : MonoBehaviour
         m_morph = new Morph();
 
         m_morph.AddTriangle(new Vector3(0f, 1f, 0f), new Vector3(-1f, 0f, 0f), new Vector3(1f, 0f, 0f));
+    }
+
+    [Button]
+    private void CheckIfConnected()
+    {
+        if (m_morph.IsConnected(m_connectedQueryOne, m_connectedQueryTwo))
+            Debug.Log("Connected!");
+        else
+            Debug.Log("Not Connected!");
     }
 
     [Button]
