@@ -45,13 +45,20 @@ public class MorphTest : MonoBehaviour
     [SerializeField]
     private MeshFilter m_resultMeshFilter;
 
+    private void Awake()
+    {
+        Reinit();
+    }
+
     public void Reinit()
     {
+        Material[] mats = m_testMesh.GetComponent<Renderer>().sharedMaterials;
         m_morph = new Morph(m_testMesh, m_collapseColocatedPoints);
         m_testMesh.gameObject.SetActive(false);
 
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
         m_resultMeshFilter.gameObject.SetActive(true);
+        m_resultMeshFilter.GetComponent<Renderer>().sharedMaterials = mats;
     }
 
     [Button]
@@ -88,6 +95,9 @@ public class MorphTest : MonoBehaviour
     [Button]
     private void CheckIfConnected()
     {
+        if (m_connectedQueryOne > m_morph.PointCount || m_connectedQueryTwo > m_morph.PointCount)
+            return;
+
         if (m_morph.IsConnected(m_connectedQueryOne, m_connectedQueryTwo))
             Debug.Log("Connected!");
         else
@@ -97,8 +107,9 @@ public class MorphTest : MonoBehaviour
     [Button]
     private void Flip()
     {
-        m_morph = new Morph(m_testMesh, m_collapseColocatedPoints);
-        m_testMesh.gameObject.SetActive(false);
+        if (m_morph == null)
+            Reinit();
+
         m_morph.FlipNormals();
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
     }
@@ -130,7 +141,7 @@ public class MorphTest : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        if (m_morph == null || !m_drawGizmos)
+        if (m_morph == null || !m_drawGizmos || !Application.isPlaying)
             return;
 
         m_morph.DrawGizmo();

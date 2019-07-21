@@ -29,7 +29,7 @@ namespace Simplex
         }
 
         public Morph(MeshFilter meshFilter, bool collapseColocatedPoints = false) : this(meshFilter.sharedMesh, collapseColocatedPoints) { }
-        
+
         public Morph(Mesh mesh, bool collapseColocatedPoints = false) : this(collapseColocatedPoints)
         {
             int[] triangles = mesh.triangles;
@@ -69,7 +69,7 @@ namespace Simplex
         public Mesh ToMesh()
         {
             Mesh mesh = new Mesh();
-            
+
             int pointCount = m_hashes.PointCount;
             Point[] points = new Point[pointCount];
             Vector3[] vertices = new Vector3[pointCount];
@@ -91,7 +91,7 @@ namespace Simplex
 
             int[] triangles = new int[m_hashes.TriangleCount * 3];
             i = 0;
-            
+
             foreach (Triangle triangle in m_hashes.Triangles)
             {
                 for (int j = 0; j < 3; j++)
@@ -106,7 +106,7 @@ namespace Simplex
                     }
                 }
             }
-            
+
             mesh.vertices = vertices;
             mesh.uv = uvs;
             mesh.normals = normals;
@@ -115,7 +115,7 @@ namespace Simplex
 
             return mesh;
         }
-        
+
         public IEnumerable<Point> Points
         {
             get
@@ -150,7 +150,7 @@ namespace Simplex
             Edge ab = new Edge(a, b);
             Edge bc = new Edge(b, c);
             Edge ca = new Edge(c, a);
-            
+
             AddEdge(ab, findNewTriangles: false);
             AddEdge(bc, findNewTriangles: false);
             AddEdge(ca, findNewTriangles: false);
@@ -1000,7 +1000,6 @@ namespace Simplex
             private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
 
             private Dictionary<int, HashSet<Edge>> m_edges = new Dictionary<int, HashSet<Edge>>();
-            private Dictionary<int, HashSet<Edge>> m_virtualEdges = new Dictionary<int, HashSet<Edge>>();
 
             private Dictionary<int, HashSet<Triangle>> m_triangles = new Dictionary<int, HashSet<Triangle>>();
             private Dictionary<int, HashSet<Face>> m_faces = new Dictionary<int, HashSet<Face>>();
@@ -1014,15 +1013,7 @@ namespace Simplex
 
             public void AddEdge(Edge edge)
             {
-                if (!m_connectedPoints.ContainsKey(edge.A.ID))
-                    m_connectedPoints.Add(edge.A.ID, new HashSet<int>());
-
-                m_connectedPoints[edge.A.ID].Add(edge.B.ID);
-
-                if (!m_connectedPoints.ContainsKey(edge.B.ID))
-                    m_connectedPoints.Add(edge.B.ID, new HashSet<int>());
-
-                m_connectedPoints[edge.B.ID].Add(edge.A.ID);
+                AddConnection(edge.A, edge.B);
 
                 if (!m_edges.ContainsKey(edge.A.ID))
                     m_edges.Add(edge.A.ID, new HashSet<Edge>());
@@ -1034,7 +1025,25 @@ namespace Simplex
 
                 m_edges[edge.B.ID].Add(edge);
             }
-            
+
+            public void AddConnection(Point a, Point b)
+            {
+                AddConnection(a.ID, b.ID);
+            }
+
+            public void AddConnection(int a, int b)
+            {
+                if (!m_connectedPoints.ContainsKey(a))
+                    m_connectedPoints.Add(a, new HashSet<int>());
+
+                m_connectedPoints[a].Add(b);
+
+                if (!m_connectedPoints.ContainsKey(b))
+                    m_connectedPoints.Add(b, new HashSet<int>());
+
+                m_connectedPoints[b].Add(a);
+            }
+
             public IEnumerable<int> ConnectedPoints(int id)
             {
                 if (!m_connectedPoints.ContainsKey(id))
@@ -1147,22 +1156,30 @@ namespace Simplex
             /// </summary>
             public Point GetExistingPointInSameLocation(Point point, bool copyDataFromGivenPoint = true)
             {
-                if (!m_collapseCollocatedPoints)
+                int locationID = point.GetLocationID();
+
+                // points already exist at given location. return one arbitrarily.
+                if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
                 {
-                    int locationID = point.GetLocationID();
+                    Point existing = m_pointsByLocation[locationID].First();
 
-                    // points already exist at given location. return one arbitrarily.
-                    if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
+                    if (m_collapseCollocatedPoints)
                     {
-                        Point existing = m_pointsByLocation[locationID].First();
-
                         if (copyDataFromGivenPoint && point.HasDataOtherThanPosition)
                             existing.CopyNonPositionData(point);
 
                         return existing;
                     }
+                    else
+                    {
+                        // if we're not collapsing points, just make a note of the connection between
+                        // the two points which occupy the same space. This will allow us to treat them as the same point
+                        // for pathing
+                        AddConnection(point, existing);
+                    }
+
                 }
-                
+
                 // point is at a new location so it's ok to use
                 return point;
             }
