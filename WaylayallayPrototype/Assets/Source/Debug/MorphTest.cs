@@ -6,6 +6,19 @@ using NaughtyAttributes;
 
 public class MorphTest : MonoBehaviour
 {
+    [SerializeField]
+    [OnValueChanged("Reinit")]
+    private bool m_collapseColocatedPoints = false;
+
+    [SerializeField]
+    private bool m_moving = false;
+
+    [SerializeField]
+    private float m_moveSpeed = 100f;
+
+    [SerializeField]
+    private int m_movingPoint = 0;
+
     private bool m_initialized = false;
 
     [SerializeField]
@@ -32,36 +45,19 @@ public class MorphTest : MonoBehaviour
     [SerializeField]
     private MeshFilter m_resultMeshFilter;
 
+    public void Reinit()
+    {
+        m_morph = new Morph(m_testMesh, m_collapseColocatedPoints);
+        m_testMesh.gameObject.SetActive(false);
+
+        m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
+        m_resultMeshFilter.gameObject.SetActive(true);
+    }
+
     [Button]
     public void CreateMorphFromMesh()
     {
-        m_morph = new Morph(m_testMesh);
-        m_testMesh.gameObject.SetActive(false);
-
-        Mesh mesh = m_morph.ToMesh();
-
-        //Debug.Log("BEFORE:");
-        //Debug.Log(m_testMesh.sharedMesh.vertices.Length);
-        //Debug.Log(m_testMesh.sharedMesh.triangles.Length);
-
-        //Debug.Log("AFTER:");
-        //Debug.Log(mesh.vertices.Length);
-        //Debug.Log(mesh.triangles.Length);
-
-        m_resultMeshFilter.sharedMesh = mesh;
-        m_resultMeshFilter.gameObject.SetActive(true);
-
-        int[] triangles = mesh.triangles;
-        Vector3[] vertices = mesh.vertices;
-
-        for (int i = 0; i < triangles.Length; i += 3)
-        {
-            Debug.Log(i);
-            Debug.Log(vertices[i]);
-            Debug.Log(vertices[(i + 1) % vertices.Length]);
-            Debug.Log(vertices[(i + 2) % vertices.Length]);
-            Debug.Log("----------------");
-        }
+        Reinit();
     }
 
     [Button]
@@ -120,6 +116,16 @@ public class MorphTest : MonoBehaviour
     {
         if (Input.GetKeyUp(KeyCode.Q))
             CreateMorphFromMesh();
+
+        if (m_moving)
+        {
+            m_movingPoint = m_movingPoint % m_morph.PointCount;
+
+            m_morph.GetPoint(m_movingPoint).Position += Vector3.right * Time.deltaTime * m_moveSpeed;
+
+            m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
+        }
+
     }
 
     private void OnDrawGizmos()

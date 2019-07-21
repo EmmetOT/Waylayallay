@@ -16,14 +16,21 @@ namespace Simplex
     [System.Serializable]
     public class Morph
     {
-        private Hashes m_hashes = new Hashes();
-        private Lookups m_lookups = new Lookups();
-        
-        public Morph() { }
+        private Hashes m_hashes;
+        private Lookups m_lookups;
 
-        public Morph(MeshFilter meshFilter) : this(meshFilter.sharedMesh) { }
+        private bool m_collapseColocatedPoints = false;
+
+        public Morph(bool collapseColocatedPoints = false)
+        {
+            m_collapseColocatedPoints = collapseColocatedPoints;
+            m_hashes = new Hashes();
+            m_lookups = new Lookups(m_collapseColocatedPoints);
+        }
+
+        public Morph(MeshFilter meshFilter, bool collapseColocatedPoints = false) : this(meshFilter.sharedMesh, collapseColocatedPoints) { }
         
-        public Morph(Mesh mesh)
+        public Morph(Mesh mesh, bool collapseColocatedPoints = false) : this(collapseColocatedPoints)
         {
             int[] triangles = mesh.triangles;
             Vector3[] vertices = mesh.vertices;
@@ -52,7 +59,7 @@ namespace Simplex
                 if (c.ID == -1)
                     m_hashes.AddPoint(c);
 
-                Debug.Log("ADDING FROM MESH: " + a.ID + " - " + b.ID + " - " + c.ID + "------------");
+                //Debug.Log("ADDING FROM MESH: " + a.ID + " - " + b.ID + " - " + c.ID + "------------");
 
                 AddTriangle(a, b, c);
             }
@@ -81,16 +88,16 @@ namespace Simplex
                 ++i;
             }
 
-            int[] triangles = new int[m_hashes.TriangleCount];
+            int[] triangles = new int[m_hashes.TriangleCount * 3];
             i = 0;
-
+            
             foreach (Triangle triangle in m_hashes.Triangles)
             {
                 for (int j = 0; j < 3; j++)
                 {
                     for (int k = 0; k < points.Length; k++)
                     {
-                        if (points[j] == triangle[j])
+                        if (points[k] == triangle[j])
                         {
                             triangles[i++] = k;
                             break;
@@ -98,7 +105,7 @@ namespace Simplex
                     }
                 }
             }
-
+            
             mesh.vertices = vertices;
             mesh.uv = uvs;
             mesh.normals = normals;
@@ -114,6 +121,14 @@ namespace Simplex
             {
                 foreach (Point point in m_hashes.Points)
                     yield return point;
+            }
+        }
+
+        public int PointCount
+        {
+            get
+            {
+                return m_hashes.PointCount;
             }
         }
 
@@ -175,15 +190,15 @@ namespace Simplex
         {
             if (m_hashes.HasEdge(edge))
             {
-                Debug.Log("Already have the edge " + edge.ToString() + ", whose hashcode is " + edge.GetHashCode());
+                //Debug.Log("Already have the edge " + edge.ToString() + ", whose hashcode is " + edge.GetHashCode());
                 return;
             }
-            else
-            {
-                Debug.Log("Adding new edge, whose hashcode is " + edge.GetHashCode());
-            }
+            //else
+            //{
+            //    Debug.Log("Adding new edge, whose hashcode is " + edge.GetHashCode());
+            //}
 
-            Debug.Log("Adding edge " + edge.ToString());
+            //Debug.Log("Adding edge " + edge.ToString());
 
             m_hashes.AddPoint(edge.A);
             m_hashes.AddPoint(edge.B);
@@ -444,7 +459,7 @@ namespace Simplex
             /// </summary>
             public void SetID(int id)
             {
-                Debug.Log("Setting id to " + id);
+                //Debug.Log("Setting id to " + id);
                 ID = id;
             }
 
@@ -979,6 +994,13 @@ namespace Simplex
             private Dictionary<int, HashSet<Triangle>> m_triangles = new Dictionary<int, HashSet<Triangle>>();
             private Dictionary<int, HashSet<Face>> m_faces = new Dictionary<int, HashSet<Face>>();
 
+            private bool m_collapseCollocatedPoints;
+
+            public Lookups(bool collapseColocatedPoints)
+            {
+                m_collapseCollocatedPoints = collapseColocatedPoints;
+            }
+
             public void AddEdge(Edge edge)
             {
                 if (!m_connectedPoints.ContainsKey(edge.A.ID))
@@ -1114,19 +1136,22 @@ namespace Simplex
             /// </summary>
             public Point GetExistingPointInSameLocation(Point point, bool copyDataFromGivenPoint = true)
             {
-                int locationID = point.GetLocationID();
-
-                // points already exist at given location. return one arbitrarily.
-                if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
+                if (!m_collapseCollocatedPoints)
                 {
-                    Point existing = m_pointsByLocation[locationID].First();
+                    int locationID = point.GetLocationID();
 
-                    if (copyDataFromGivenPoint && point.HasDataOtherThanPosition)
-                        existing.CopyNonPositionData(point);
+                    // points already exist at given location. return one arbitrarily.
+                    if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
+                    {
+                        Point existing = m_pointsByLocation[locationID].First();
 
-                    return existing;
+                        if (copyDataFromGivenPoint && point.HasDataOtherThanPosition)
+                            existing.CopyNonPositionData(point);
+
+                        return existing;
+                    }
                 }
-
+                
                 // point is at a new location so it's ok to use
                 return point;
             }
