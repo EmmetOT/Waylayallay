@@ -30,6 +30,28 @@ public class MorphTest : MonoBehaviour
     private MeshFilter m_testMesh;
 
     [Button]
+    private void TestHashCodeMethod()
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            for (int j = 0; j < 10; j++)
+            {
+                int hash;
+                if (i > j)
+                {
+                    hash = 32768 * i + j;
+                }
+                else
+                {
+                    hash = 32768 * j + i;
+                }
+
+                Debug.Log("[" + i + ", " + j + "] = " + hash);
+            }
+        }
+    }
+
+    [Button]
     public void CreateMorphFromMesh()
     {
         m_morph = new Morph(m_testMesh);

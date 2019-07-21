@@ -44,6 +44,17 @@ namespace Simplex
                 b = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexB], uvs[indexB], normals[indexB], tangents[indexB]));
                 c = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexC], uvs[indexC], normals[indexC], tangents[indexC]));
 
+                if (a.ID == -1)
+                    m_hashes.AddPoint(a);
+
+                if (b.ID == -1)
+                    m_hashes.AddPoint(b);
+
+                if (c.ID == -1)
+                    m_hashes.AddPoint(c);
+
+                Debug.Log("ADDING FROM MESH: " + a.ID + " - " + b.ID + " - " + c.ID + "------------");
+
                 AddTriangle(a, b, c);
             }
         }
@@ -69,13 +80,13 @@ namespace Simplex
         {
             if (a.ID == -1)
                 m_hashes.AddPoint(a);
-            
+
             if (b.ID == -1)
                 m_hashes.AddPoint(b);
-            
+
             if (c.ID == -1)
                 m_hashes.AddPoint(c);
-            
+
             AddEdge(new Edge(a, b));
             AddEdge(new Edge(b, c));
             AddEdge(new Edge(c, a));
@@ -103,7 +114,7 @@ namespace Simplex
 
             AddTriangle(pointA, pointB, pointC);
         }
-        
+
         /// <summary>
         /// Add a new edge connecting point A to point B.
         /// 
@@ -112,18 +123,27 @@ namespace Simplex
         public void AddEdge(Edge edge)
         {
             if (m_hashes.HasEdge(edge))
+            {
+                Debug.Log("Already have the edge " + edge.ToString() + ", whose hashcode is " + edge.GetHashCode());
                 return;
-            
+            }
+            else
+            {
+                Debug.Log("Adding new edge, whose hashcode is " + edge.GetHashCode());
+            }
+
+            Debug.Log("Adding edge " + edge.ToString());
+
             m_hashes.AddPoint(edge.A);
             m_hashes.AddPoint(edge.B);
-            
+
             m_hashes.AddEdge(edge);
 
             m_lookups.AddPoint(edge.A);
             m_lookups.AddPoint(edge.B);
 
             m_lookups.AddEdge(edge);
-            
+
             // adding an edge may create a new triangle
             // 1) get all the points connected to A
             // 2) get all the points connected to B
@@ -142,7 +162,7 @@ namespace Simplex
                 }
             }
         }
-        
+
         /// <summary>
         /// Add a new edge connecting point A to point B.
         /// </summary>
@@ -162,7 +182,7 @@ namespace Simplex
         public Edge AddEdge(Vector3 a, Vector3 b)
         {
             Assert.AreNotEqual(a, b);
-            
+
             Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
             AddEdge(edge);
 
@@ -201,10 +221,10 @@ namespace Simplex
         public Edge AddEdge(int aIndex, int bIndex)
         {
             Debug.Assert(m_hashes.HasPoint(aIndex) && m_hashes.HasPoint(bIndex), "Both points A and B must be in the Morph.");
-            
+
             return AddEdge(m_hashes.GetPoint(aIndex), m_hashes.GetPoint(bIndex));
         }
-        
+
         /// <summary>
         /// Get the point with the given index.
         /// </summary>
@@ -219,7 +239,7 @@ namespace Simplex
         public Edge GetEdge(int aIndex, int bIndex)
         {
             Debug.Assert(m_hashes.HasPoint(aIndex) && m_hashes.HasPoint(bIndex), "Both points A and B must be in the Morph.");
-            
+
             Point b = m_hashes.GetPoint(bIndex);
 
             foreach (Edge edge in m_lookups.GetEdgesContaining(aIndex))
@@ -283,7 +303,7 @@ namespace Simplex
 
             if (a == b)
                 return true;
-            
+
             Queue<int> queue = new Queue<int>();
             HashSet<int> seen = new HashSet<int>();
 
@@ -292,7 +312,7 @@ namespace Simplex
             while (queue.Count != 0)
             {
                 int current = queue.Dequeue();
-                
+
                 // Get all connected points of the current point
                 // if a connected point has not been seen, then mark it seen 
                 // and enqueue it 
@@ -316,7 +336,7 @@ namespace Simplex
         public void DrawGizmo()
         {
             foreach (Triangle triangle in m_hashes.Triangles)
-                triangle.DrawGizmo(Color.black, Color.black);
+                triangle.DrawGizmo(Color.black, Color.black, Color.blue);
 
             foreach (Edge edge in m_hashes.Edges)
                 if (!m_lookups.IsEdgeInTriangle(edge))
@@ -370,6 +390,7 @@ namespace Simplex
             /// </summary>
             public void SetID(int id)
             {
+                Debug.Log("Setting id to " + id);
                 ID = id;
             }
 
@@ -429,6 +450,8 @@ namespace Simplex
         [System.Serializable]
         public class Edge
         {
+            private const int TWO_TO_FIFTEENTH_POWER = 32768;
+
             public Point A { get; private set; }
             public Point B { get; private set; }
 
@@ -493,11 +516,14 @@ namespace Simplex
 
             public override int GetHashCode()
             {
-                int hash = 17;
-                hash += A.ID * 997;
-                hash += B.ID * 997;
-
-                return hash;
+                if (A.ID > B.ID)
+                {
+                    return TWO_TO_FIFTEENTH_POWER * A.ID + B.ID;
+                }
+                else
+                {
+                    return TWO_TO_FIFTEENTH_POWER * B.ID + A.ID;
+                }
             }
 
             public override bool Equals(object obj)
@@ -536,9 +562,9 @@ namespace Simplex
             public Edge BC { get; private set; }
             public Edge CA { get; private set; }
 
-            public Point A { get { return AB.A; } }
-            public Point B { get { return AB.B; } }
-            public Point C { get { return BC.B; } }
+            public Point A { get; private set; }
+            public Point B { get; private set; }
+            public Point C { get; private set; }
 
             private bool m_flippedNormal = false;
 
@@ -575,45 +601,25 @@ namespace Simplex
             {
                 get
                 {
-                    if (i < 0 || i >= 3)
+                    if (i < 0 || i > 2)
                         throw new System.ArgumentOutOfRangeException();
 
                     if (i == 0)
                         return A;
+                    else if (i == 1)
+                        return B;
 
-                    if (B.ID > C.ID)
-                    {
-                        if (i == 2)
-                            return B;
-                        else
-                            return C;
-                    }
-                    else
-                    {
-                        if (i == 2)
-                            return C;
-                        else
-                            return B;
-                    }
+                    return C;
                 }
             }
-            
+
             public IEnumerable<Point> Points
             {
                 get
                 {
-                    if (B.ID > C.ID)
-                    {
-                        yield return A;
-                        yield return B;
-                        yield return C;
-                    }
-                    else
-                    {
-                        yield return A;
-                        yield return C;
-                        yield return B;
-                    }
+                    yield return A;
+                    yield return B;
+                    yield return C;
                 }
             }
 
@@ -622,6 +628,25 @@ namespace Simplex
                 AB = ab;
                 BC = bc;
                 CA = ca;
+
+                A = AB.A;
+                B = AB.B;
+
+                if (BC.A == A || BC.A == B)
+                    C = BC.B;
+                else
+                    C = BC.A;
+
+                Debug.Assert((A.Position != B.Position) && (B.Position != C.Position) && (C.Position != A.Position), "Can't have a triangle where two or more points are equal!");
+
+                Debug.Log("Created triangle connecting " + ab.ToString() + ", " + bc.ToString() + ", " + ca.ToString() + ", whose centroid is " + Centroid + ", and whose normal is " + Normal);
+                Debug.Log("A = " + A.Position);
+                Debug.Log("B = " + B.Position);
+                Debug.Log("C = " + C.Position);
+
+                Debug.Log(AB.ToString() + " points are: " + AB.A.Position + " and " + AB.B.Position);
+                Debug.Log(BC.ToString() + " points are: " + BC.A.Position + " and " + BC.B.Position);
+                Debug.Log(CA.ToString() + " points are: " + CA.A.Position + " and " + CA.B.Position);
             }
 
             /// <summary>
@@ -664,7 +689,7 @@ namespace Simplex
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color pointCol, Color edgeCol, float radius = 0.05f)
+            public void DrawGizmo(Color pointCol, Color edgeCol, Color normalCol, float normalScale = 0.1f, float radius = 0.05f)
             {
                 foreach (Point point in Points)
                     point.DrawGizmo(pointCol, radius);
@@ -672,8 +697,8 @@ namespace Simplex
                 foreach (Edge edge in Edges)
                     edge.DrawGizmo(edgeCol);
 
-                Gizmos.color = edgeCol;
-                Gizmos.DrawLine(Centroid, Centroid + Normal);
+                Gizmos.color = normalCol;
+                Gizmos.DrawLine(Centroid, Centroid + Normal * normalScale);
             }
 #endif
         }
@@ -782,7 +807,7 @@ namespace Simplex
                 if (!m_points.ContainsKey(point.ID))
                 {
                     ++m_highestPointIndex;
-                    
+
                     m_points.Add(point.ID, point);
                 }
             }
@@ -875,14 +900,14 @@ namespace Simplex
             {
                 if (!m_connectedPoints.ContainsKey(edge.A.ID))
                     m_connectedPoints.Add(edge.A.ID, new HashSet<int>());
-                
+
                 m_connectedPoints[edge.A.ID].Add(edge.B.ID);
-                
+
                 if (!m_connectedPoints.ContainsKey(edge.B.ID))
                     m_connectedPoints.Add(edge.B.ID, new HashSet<int>());
-                
+
                 m_connectedPoints[edge.B.ID].Add(edge.A.ID);
-                
+
                 if (!m_edges.ContainsKey(edge.A.ID))
                     m_edges.Add(edge.A.ID, new HashSet<Edge>());
 
@@ -893,7 +918,7 @@ namespace Simplex
 
                 m_edges[edge.B.ID].Add(edge);
             }
-            
+
             public IEnumerable<int> ConnectedPoints(int id)
             {
                 if (!m_connectedPoints.ContainsKey(id))
