@@ -48,9 +48,9 @@ namespace Simplex
                 indexC = triangles[i + 2];
 
                 // create the three new candidate points
-                a = new Point(vertices[indexA], uvs[indexA], normals[indexA], tangents[indexA]);
-                b = new Point(vertices[indexB], uvs[indexB], normals[indexB], tangents[indexB]);
-                c = new Point(vertices[indexC], uvs[indexC], normals[indexC], tangents[indexC]);
+                a = new Point(vertices[indexA], (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : normals[indexA], (indexA >= tangents.Length) ? default : tangents[indexA]);
+                b = new Point(vertices[indexB], (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : normals[indexB], (indexB >= tangents.Length) ? default : tangents[indexB]);
+                c = new Point(vertices[indexC], (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : normals[indexC], (indexC >= tangents.Length) ? default : tangents[indexC]);
 
                 // if we have no intention of abandoning those points if we find other points
                 // already in those points, we give them IDs now
@@ -86,9 +86,11 @@ namespace Simplex
                     if (c.ID == -1)
                         m_hashes.AddPoint(c);
                 }
-                
+
                 AddTriangle(a, b, c);
             }
+
+            Debug.Log("Face count = " + m_hashes.FaceCount);
         }
 
         public Mesh ToMesh()
@@ -159,7 +161,35 @@ namespace Simplex
         }
 
         /// <summary>
-        /// Add a new triangle connecting points a, b, and c.
+        /// This method implicitly accepts the given triangle,
+        /// and determines if the new triangle belongs to any faces.
+        /// </summary>
+        private void Internal_AddTriangle(Triangle triangle)
+        {
+            m_hashes.AddTriangle(triangle);
+            m_lookups.AddTriangle(triangle);
+
+            bool addedToExistingFace = false;
+            foreach (Face face in m_hashes.Faces)
+            {
+                if (face.TryAddTriangle(triangle))
+                {
+                    addedToExistingFace = true;
+                    break;
+                }
+            }
+
+            if (!addedToExistingFace)
+            {
+                Face face = new Face(triangle);
+
+                m_hashes.AddFace(face);
+                m_lookups.AddFace(face);
+            }
+        }
+
+        /// <summary>
+        /// Add a new triangle connecting points a, b, and c, which are assumed to have a clockwise winding order.
         /// </summary>
         public void AddTriangle(Point a, Point b, Point c)
         {
@@ -180,14 +210,11 @@ namespace Simplex
             AddEdge(bc, findNewTriangles: false);
             AddEdge(ca, findNewTriangles: false);
 
-            Triangle triangle = new Triangle(ab, bc, ca, a, b, c);
-
-            m_hashes.AddTriangle(triangle);
-            m_lookups.AddTriangle(triangle);
+            Internal_AddTriangle(new Triangle(ab, bc, ca, a, b, c));
         }
 
         /// <summary>
-        /// Add a new triangle connecting points a, b, and c.
+        /// Add a new triangle connecting points a, b, and c, which are assumed to have a clockwise winding order.
         /// </summary>
         public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
         {
@@ -198,6 +225,9 @@ namespace Simplex
             AddTriangle(pointA, pointB, pointC);
         }
 
+        /// <summary>
+        /// Add a new triangle connecting points a, b, and c (given by point ID), which are assumed to have a clockwise winding order.
+        /// </summary>
         public void AddTriangle(int a, int b, int c)
         {
             Point pointA = m_hashes.GetPoint(a);
@@ -249,10 +279,7 @@ namespace Simplex
                 {
                     if (pointsFromB.Contains(pointFromA))
                     {
-                        Triangle triangle = new Triangle(edge, m_lookups.GetEdge(edge.B.ID, pointFromA), m_lookups.GetEdge(pointFromA, edge.A.ID));
-
-                        m_hashes.AddTriangle(triangle);
-                        m_lookups.AddTriangle(triangle);
+                        Internal_AddTriangle(new Triangle(edge, m_lookups.GetEdge(edge.B.ID, pointFromA), m_lookups.GetEdge(pointFromA, edge.A.ID)));
                     }
                 }
             }
@@ -437,6 +464,18 @@ namespace Simplex
                 if (!m_lookups.IsEdgeInTriangle(edge))
                     edge.DrawGizmo(Color.red, transform: transform);
         }
+
+        public void DrawFaces(Transform transform = null)
+        {
+            foreach (Face face in m_hashes.Faces)
+            {
+                int hash = face.GetHashCode();
+
+                Color col = new Color((Mathf.Abs(hash) % 255f) / 255f, (Mathf.Abs(hash * 3f) % 255f) / 255f, (Mathf.Abs(hash * 5f) % 255f) / 255f);
+
+                face.DrawGizmo(col, transform);
+            }
+        }
 #endif
 
         #region Primitive Classes
@@ -468,10 +507,8 @@ namespace Simplex
                     return UV != Vector2.zero || Normal != Vector3.zero || Tangent != Vector4.zero;
                 }
             }
-
-            public Point(Vector3 vector) : this(vector, Vector2.zero, Vector3.zero, Vector4.zero) { }
-
-            public Point(Vector3 vector, Vector2 uv, Vector3 normal, Vector4 tangent)
+            
+            public Point(Vector3 vector, Vector2 uv = default, Vector3 normal = default, Vector4 tangent = default)
             {
                 Position = vector;
                 UV = uv;
@@ -521,9 +558,15 @@ namespace Simplex
 
                 Matrix4x4 originalHandleMatrix = Handles.matrix;
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
+                
+                Gizmos.color = (ID <= 2) ? Color.red : col;
+                Gizmos.DrawSphere(Position, (ID <= 2) ? radius * 1.5f : radius);
 
-                Gizmos.color = col;
-                Gizmos.DrawSphere(Position, radius);
+                if (ID > 2 && ID <= 5)
+                {
+                    Gizmos.color = Color.blue;
+                    Gizmos.DrawSphere(Position, radius * 1.5f);
+                }
 
                 if (label)
                 {
@@ -531,13 +574,13 @@ namespace Simplex
                     handleStyle.normal.textColor = Color.white;
                     handleStyle.fontSize = 30;
 
-                    Handles.Label(Position + Vector3.up * 0.2f, ID.ToString(), handleStyle);
+                    Handles.Label(Position + Normal * 0.15f, ID.ToString(), handleStyle);
 
                     handleStyle = new GUIStyle();
                     handleStyle.normal.textColor = Color.black;
                     handleStyle.fontSize = 10;
 
-                    Handles.Label(Position + Vector3.up * 0.3f, UV.ToString(), handleStyle);
+                    Handles.Label(Position + Normal * 0.15f + Vector3.up * 0.2f, UV.ToString(), handleStyle);
                 }
 
                 Gizmos.matrix = originalGizmoMatrix;
@@ -614,7 +657,7 @@ namespace Simplex
 
             public override string ToString()
             {
-                return "[" + A.ID + " to " + B.ID + "]";
+                return "[" + A.ID + ", " + B.ID + "]";
             }
 
             public override int GetHashCode()
@@ -635,6 +678,22 @@ namespace Simplex
                     return false;
 
                 return GetHashCode() == other.GetHashCode();
+            }
+
+            public static bool operator ==(Edge edge1, Edge edge2)
+            {
+                int _1a = edge1.A.GetLocationID();
+                int _1b = edge1.B.GetLocationID();
+
+                int _2a = edge2.A.GetLocationID();
+                int _2b = edge2.B.GetLocationID();
+
+                return (_1a == _2a && _1b == _2b) || (_1a == _2b && _1b == _2a);
+            }
+
+            public static bool operator !=(Edge edge1, Edge edge2)
+            {
+                return !(edge1 == edge2);
             }
 
 #if UNITY_EDITOR
@@ -784,6 +843,14 @@ namespace Simplex
             }
 
             /// <summary>
+            /// Generate an array of vectors representing this triangle's vertices.
+            /// </summary>
+            public Vector3[] GetPointsArray()
+            {
+                return new Vector3[] { this[0].Position, this[1].Position, this[2].Position };
+            }
+
+            /// <summary>
             /// Returns true if the two triangles are part of the same face - 
             /// that is, they are both conormal (facing the same way) and contiguous
             /// (attached to each other.)
@@ -802,7 +869,7 @@ namespace Simplex
                     foreach (Edge other in triangle.Edges)
                         if (edge == other)
                             return true;
-
+                
                 return false;
             }
 
@@ -820,6 +887,11 @@ namespace Simplex
             public void Flip()
             {
                 m_flippedNormal = !m_flippedNormal;
+            }
+
+            public override string ToString()
+            {
+                return "[" + A.ID + ", " + B.ID + ", " + C.ID + "]";
             }
 
 #if UNITY_EDITOR
@@ -849,11 +921,15 @@ namespace Simplex
         /// <summary>
         /// A face represents a number of triangles which are all contiguous 
         /// and conormal.
+        /// 
+        /// TODO: Any point, edge, or triangle of this face moving means this face has to be updated.
         /// </summary>
         [System.Serializable]
         public class Face
         {
             private HashSet<Triangle> m_triangles = new HashSet<Triangle>();
+
+            private Triangle m_initialTriangle;
 
             public IEnumerable<Triangle> Triangles
             {
@@ -864,35 +940,140 @@ namespace Simplex
                 }
             }
 
-            public void AddTriangle(Triangle triangle)
+            public Vector3 Normal
             {
-                m_triangles.Add(triangle);
+                get
+                {
+                    return m_initialTriangle.Normal;
+                }
             }
 
-            public bool IsContiguous(Triangle triangle)
+            public Face(Triangle triangle)
             {
-                throw new System.NotImplementedException();
+                m_initialTriangle = triangle;
+                m_triangles.Add(m_initialTriangle);
             }
 
-            public bool IsConormal(Triangle triangle)
+            /// <summary>
+            /// If this triangle does not already belong to this face, and belongs as part of it (shares a normal with all triangles in the mesh
+            /// and an edge with at least one), then add it and return true. Else return false.
+            /// </summary>
+            public bool TryAddTriangle(Triangle newTriangle)
             {
-                throw new System.NotImplementedException();
+                if (!m_triangles.Contains(newTriangle) && IsConormal(newTriangle) && IsContiguous(newTriangle))
+                {
+                    m_triangles.Add(newTriangle);
+                    return true;
+                }
+
+                return false;
             }
 
+            /// <summary>
+            /// If this triangle is not already part of this face, and it shares an edge with at least
+            /// one triangle of this face, return true. Else return false.
+            /// </summary>
+            public bool IsContiguous(Triangle newTriangle)
+            {
+                if (m_triangles.Contains(newTriangle))
+                    return false;
+                
+                foreach (Triangle triangle in m_triangles)
+                    if (triangle.IsContiguous(newTriangle))
+                        return true;
+
+                return false;
+            }
+
+            /// <summary>
+            /// If this triangle is not already part of this face, and it shares an edge with at least
+            /// one triangle of this face, return true. Else return false.
+            /// </summary>
+            public bool IsConormal(Triangle newTriangle)
+            {
+                if (m_triangles.Contains(newTriangle))
+                    return false;
+
+                foreach (Triangle triangle in m_triangles)
+                    if (!triangle.IsConormal(newTriangle))
+                        return false;
+
+                return true;
+            }
+
+            /// <summary>
+            /// If this face has any triangles which share an edge with any triangles in the given face,
+            /// they are contiguous.
+            /// </summary>
             public bool IsContiguous(Face face)
             {
-                throw new System.NotImplementedException();
+                foreach (Triangle triangle in m_triangles)
+                    if (face.IsContiguous(triangle))
+                        return true;
+
+                return false;
             }
 
+            /// <summary>
+            /// If the normal of this face is the same as the normal of the given face, they are conormal.
+            /// </summary>
             public bool IsConormal(Face face)
             {
-                throw new System.NotImplementedException();
+                return Normal == face.Normal;
             }
 
             public void Retriangulate()
             {
                 throw new System.NotImplementedException();
             }
+
+            public override string ToString()
+            {
+                System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+                sb.Append("[");
+
+                foreach (Triangle triangle in m_triangles)
+                    sb.Append(triangle.ToString() + ", ");
+
+                sb.Remove(sb.Length - 2, 2);
+
+                sb.Append("]");
+
+                return sb.ToString();
+            }
+
+
+#if UNITY_EDITOR
+            public void DrawGizmo(Color col, Transform transform = null)
+            {
+                //Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
+                //Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
+
+                Matrix4x4 originalHandleMatrix = Handles.matrix;
+                Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
+
+                Handles.color = col;
+
+                // TODO: transform this by the matrix above
+                Vector3 normal = Normal;
+
+                foreach (Triangle triangle in m_triangles)
+                {
+                    Vector3[] vertices = triangle.GetPointsArray();
+
+                    for (int i = 0; i < vertices.Length; i++)
+                    {
+                        vertices[i] += normal * 0.6f;
+                    }
+
+                    Handles.DrawAAConvexPolygon(vertices);
+                }
+
+                //Gizmos.matrix = originalGizmoMatrix;
+                Handles.matrix = originalHandleMatrix;
+            }
+#endif
         }
 
         #endregion
@@ -930,6 +1111,14 @@ namespace Simplex
                 }
             }
 
+            public int EdgeCount
+            {
+                get
+                {
+                    return m_edges.Count;
+                }
+            }
+
             public IEnumerable<Edge> Edges
             {
                 get
@@ -953,6 +1142,21 @@ namespace Simplex
                 {
                     foreach (Triangle triangle in m_triangles)
                         yield return triangle;
+                }
+            }
+            public int FaceCount
+            {
+                get
+                {
+                    return m_faces.Count;
+                }
+            }
+            public IEnumerable<Face> Faces
+            {
+                get
+                {
+                    foreach (Face face in m_faces)
+                        yield return face;
                 }
             }
 
@@ -1053,6 +1257,7 @@ namespace Simplex
             private Dictionary<int, HashSet<Edge>> m_edges = new Dictionary<int, HashSet<Edge>>();
 
             private Dictionary<int, HashSet<Triangle>> m_triangles = new Dictionary<int, HashSet<Triangle>>();
+
             private Dictionary<int, HashSet<Face>> m_faces = new Dictionary<int, HashSet<Face>>();
 
             private bool m_collapseCollocatedPoints;
@@ -1225,8 +1430,6 @@ namespace Simplex
                         // the two points which occupy the same space. This will allow us to treat them as the same point
                         // for pathing
 
-                        Debug.Log("Adding a connection from " + point.ID + " to " + existing.ID);
-
                         AddConnection(point, existing);
                     }
 
@@ -1251,6 +1454,12 @@ namespace Simplex
                 // point is at a new location so it's ok to use
                 return vec.ToPoint();
             }
+
+            public void AddFace(Face face)
+            {
+
+            }
+
         }
 
         #endregion

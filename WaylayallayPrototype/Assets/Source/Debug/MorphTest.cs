@@ -144,22 +144,6 @@ public class MorphTest : MonoBehaviour
             return;
 
         if (m_morph != null)
-            m_morph.DrawGizmo(m_resultMeshFilter?.transform);
-
-        if (m_testMesh != null)
-        {
-            GUIStyle handleStyle = new GUIStyle();
-            handleStyle.normal.textColor = Color.black;
-            handleStyle.fontSize = 10;
-
-            Vector3[] vertices = m_testMesh.sharedMesh.vertices;
-            Vector2[] uv = m_testMesh.sharedMesh.uv;
-            
-            for (int i = 0; i < vertices.Length; i++)
-            {
-                UnityEditor.Handles.Label(m_testMesh.transform.position + vertices[i] + Vector3.up * 0.3f, uv[i].ToString(), handleStyle);
-            }
-
-        }
+            m_morph.DrawFaces(m_resultMeshFilter?.transform);
     }
 }
