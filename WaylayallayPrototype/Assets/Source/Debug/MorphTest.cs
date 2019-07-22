@@ -54,7 +54,6 @@ public class MorphTest : MonoBehaviour
     {
         Material[] mats = m_testMesh.GetComponent<Renderer>().sharedMaterials;
         m_morph = new Morph(m_testMesh, m_collapseColocatedPoints);
-        m_testMesh.gameObject.SetActive(false);
 
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
         m_resultMeshFilter.gameObject.SetActive(true);
@@ -141,9 +140,26 @@ public class MorphTest : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        if (m_morph == null || !m_drawGizmos || !Application.isPlaying)
+        if (!m_drawGizmos || !Application.isPlaying)
             return;
 
-        m_morph.DrawGizmo();
+        if (m_morph != null)
+            m_morph.DrawGizmo(m_resultMeshFilter?.transform);
+
+        if (m_testMesh != null)
+        {
+            GUIStyle handleStyle = new GUIStyle();
+            handleStyle.normal.textColor = Color.black;
+            handleStyle.fontSize = 10;
+
+            Vector3[] vertices = m_testMesh.sharedMesh.vertices;
+            Vector2[] uv = m_testMesh.sharedMesh.uv;
+            
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                UnityEditor.Handles.Label(m_testMesh.transform.position + vertices[i] + Vector3.up * 0.3f, uv[i].ToString(), handleStyle);
+            }
+
+        }
     }
 }

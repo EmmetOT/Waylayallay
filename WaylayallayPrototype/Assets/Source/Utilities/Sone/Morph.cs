@@ -47,21 +47,46 @@ namespace Simplex
                 indexB = triangles[i + 1];
                 indexC = triangles[i + 2];
 
-                a = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexA], uvs[indexA], normals[indexA], tangents[indexA]));
-                b = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexB], uvs[indexB], normals[indexB], tangents[indexB]));
-                c = m_lookups.GetExistingPointInSameLocation(new Point(vertices[indexC], uvs[indexC], normals[indexC], tangents[indexC]));
+                // create the three new candidate points
+                a = new Point(vertices[indexA], uvs[indexA], normals[indexA], tangents[indexA]);
+                b = new Point(vertices[indexB], uvs[indexB], normals[indexB], tangents[indexB]);
+                c = new Point(vertices[indexC], uvs[indexC], normals[indexC], tangents[indexC]);
 
-                if (a.ID == -1)
-                    m_hashes.AddPoint(a);
+                // if we have no intention of abandoning those points if we find other points
+                // already in those points, we give them IDs now
+                if (!m_collapseColocatedPoints)
+                {
+                    if (a.ID == -1)
+                        m_hashes.AddPoint(a);
 
-                if (b.ID == -1)
-                    m_hashes.AddPoint(b);
+                    if (b.ID == -1)
+                        m_hashes.AddPoint(b);
 
-                if (c.ID == -1)
-                    m_hashes.AddPoint(c);
+                    if (c.ID == -1)
+                        m_hashes.AddPoint(c);
+                }
 
-                //Debug.Log("ADDING FROM MESH: " + a.ID + " - " + b.ID + " - " + c.ID + "------------");
+                // this method will try to find points occupying the same position as the given point.
+                // if we're collapsing points, then it will return the original point. else it will add the new
+                // points as 'connected' for the sake of graph searches
+                a = m_lookups.GetExistingPointInSameLocation(a);
+                b = m_lookups.GetExistingPointInSameLocation(b);
+                c = m_lookups.GetExistingPointInSameLocation(c);
 
+                // now if we still have new points
+                // we can assign them IDs
+                if (m_collapseColocatedPoints)
+                {
+                    if (a.ID == -1)
+                        m_hashes.AddPoint(a);
+
+                    if (b.ID == -1)
+                        m_hashes.AddPoint(b);
+
+                    if (c.ID == -1)
+                        m_hashes.AddPoint(c);
+                }
+                
                 AddTriangle(a, b, c);
             }
         }
@@ -403,14 +428,14 @@ namespace Simplex
         }
 
 #if UNITY_EDITOR
-        public void DrawGizmo()
+        public void DrawGizmo(Transform transform = null)
         {
             foreach (Triangle triangle in m_hashes.Triangles)
-                triangle.DrawGizmo(Color.black, Color.black, Color.blue);
+                triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
 
             foreach (Edge edge in m_hashes.Edges)
                 if (!m_lookups.IsEdgeInTriangle(edge))
-                    edge.DrawGizmo(Color.red);
+                    edge.DrawGizmo(Color.red, transform: transform);
         }
 #endif
 
@@ -460,7 +485,6 @@ namespace Simplex
             /// </summary>
             public void SetID(int id)
             {
-                //Debug.Log("Setting id to " + id);
                 ID = id;
             }
 
@@ -490,8 +514,14 @@ namespace Simplex
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color col, float radius = 0.05f, bool label = true)
+            public void DrawGizmo(Color col, float radius = 0.05f, bool label = true, Transform transform = null)
             {
+                Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
+                Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
+
+                Matrix4x4 originalHandleMatrix = Handles.matrix;
+                Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
+
                 Gizmos.color = col;
                 Gizmos.DrawSphere(Position, radius);
 
@@ -507,8 +537,11 @@ namespace Simplex
                     handleStyle.normal.textColor = Color.black;
                     handleStyle.fontSize = 10;
 
-                    Handles.Label(Position + Vector3.up * 0.3f, Position.ToString(), handleStyle);
+                    Handles.Label(Position + Vector3.up * 0.3f, UV.ToString(), handleStyle);
                 }
+
+                Gizmos.matrix = originalGizmoMatrix;
+                Handles.matrix = originalHandleMatrix;
 #endif
             }
         }
@@ -605,18 +638,27 @@ namespace Simplex
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color pointCol, Color edgeCol, float radius = 0.05f, bool label = true)
+            public void DrawGizmo(Color pointCol, Color edgeCol, float radius = 0.05f, bool label = true, Transform transform = null)
             {
+                Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
+                Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
+
+                Matrix4x4 originalHandleMatrix = Handles.matrix;
+                Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
+
                 Gizmos.color = edgeCol;
                 Gizmos.DrawLine(A.Position, B.Position);
 
-                A.DrawGizmo(pointCol, radius);
-                B.DrawGizmo(pointCol, radius);
+                A.DrawGizmo(pointCol, radius, label, transform);
+                B.DrawGizmo(pointCol, radius, label, transform);
+
+                Gizmos.matrix = originalGizmoMatrix;
+                Handles.matrix = originalHandleMatrix;
             }
 
-            public void DrawGizmo(Color edgeCol, float radius = 0.05f, bool label = true)
+            public void DrawGizmo(Color edgeCol, float radius = 0.05f, bool label = true, Transform transform = null)
             {
-                DrawGizmo(edgeCol, edgeCol, radius, label);
+                DrawGizmo(edgeCol, edgeCol, radius, label, transform);
             }
 #endif
         }
@@ -781,16 +823,25 @@ namespace Simplex
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color pointCol, Color edgeCol, Color normalCol, float normalScale = 0.1f, float radius = 0.05f)
+            public void DrawGizmo(Color pointCol, Color edgeCol, Color normalCol, float normalScale = 0.1f, float radius = 0.05f, Transform transform = null)
             {
                 foreach (Point point in Points)
-                    point.DrawGizmo(pointCol, radius);
+                    point.DrawGizmo(pointCol, radius, transform: transform);
 
                 foreach (Edge edge in Edges)
-                    edge.DrawGizmo(edgeCol);
+                    edge.DrawGizmo(edgeCol, radius: radius, transform: transform);
+
+                Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
+                Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
+
+                Matrix4x4 originalHandleMatrix = Handles.matrix;
+                Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
                 Gizmos.color = normalCol;
                 Gizmos.DrawLine(Centroid, Centroid + Normal * normalScale);
+
+                Gizmos.matrix = originalGizmoMatrix;
+                Handles.matrix = originalHandleMatrix;
             }
 #endif
         }
@@ -1058,8 +1109,6 @@ namespace Simplex
                 if (!m_connectedPoints.ContainsKey(id))
                     return null;
 
-                // TODO: read only hashset?
-
                 return m_connectedPoints[id];
             }
 
@@ -1175,6 +1224,9 @@ namespace Simplex
                         // if we're not collapsing points, just make a note of the connection between
                         // the two points which occupy the same space. This will allow us to treat them as the same point
                         // for pathing
+
+                        Debug.Log("Adding a connection from " + point.ID + " to " + existing.ID);
+
                         AddConnection(point, existing);
                     }
 
