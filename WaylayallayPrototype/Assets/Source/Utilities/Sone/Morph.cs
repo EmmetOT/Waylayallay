@@ -23,15 +23,33 @@ namespace Simplex
 
         public Morph(bool collapseColocatedPoints = false)
         {
-            m_collapseColocatedPoints = collapseColocatedPoints;
+            SetCollapseColocatedPoints(collapseColocatedPoints);
             m_hashes = new Hashes();
             m_lookups = new Lookups(m_collapseColocatedPoints);
         }
 
-        public Morph(MeshFilter meshFilter, bool collapseColocatedPoints = false) : this(meshFilter.sharedMesh, collapseColocatedPoints) { }
-
-        public Morph(Mesh mesh, bool collapseColocatedPoints = false) : this(collapseColocatedPoints)
+        public Morph(params MeshFilter[] meshes) : this()
         {
+            for (int i = 0; i < meshes.Length; i++)
+                AddMesh(meshes[i]);
+        }
+
+        public Morph(params Mesh[] meshes) : this()
+        {
+            for (int i = 0; i < meshes.Length; i++)
+                AddMesh(meshes[i]);
+        }
+
+        public void AddMesh(MeshFilter meshFilter)
+        {
+            AddMesh(meshFilter.sharedMesh, meshFilter.transform.localToWorldMatrix);
+        }
+
+        public void AddMesh(Mesh mesh, Matrix4x4 matrix = default)
+        {
+            if (matrix == default)
+                matrix = Matrix4x4.identity;
+
             int[] triangles = mesh.triangles;
             Vector3[] vertices = mesh.vertices;
             Vector2[] uvs = mesh.uv;
@@ -48,9 +66,9 @@ namespace Simplex
                 indexC = triangles[i + 2];
 
                 // create the three new candidate points
-                a = new Point(vertices[indexA], (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : normals[indexA], (indexA >= tangents.Length) ? default : tangents[indexA]);
-                b = new Point(vertices[indexB], (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : normals[indexB], (indexB >= tangents.Length) ? default : tangents[indexB]);
-                c = new Point(vertices[indexC], (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : normals[indexC], (indexC >= tangents.Length) ? default : tangents[indexC]);
+                a = new Point(matrix.MultiplyPoint(vertices[indexA]), (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : normals[indexA], (indexA >= tangents.Length) ? default : tangents[indexA]);
+                b = new Point(matrix.MultiplyPoint(vertices[indexB]), (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : normals[indexB], (indexB >= tangents.Length) ? default : tangents[indexB]);
+                c = new Point(matrix.MultiplyPoint(vertices[indexC]), (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : normals[indexC], (indexC >= tangents.Length) ? default : tangents[indexC]);
 
                 // if we have no intention of abandoning those points if we find other points
                 // already in those points, we give them IDs now
@@ -89,10 +107,11 @@ namespace Simplex
 
                 AddTriangle(a, b, c);
             }
-
-            Debug.Log("Face count = " + m_hashes.FaceCount);
         }
 
+        /// <summary>
+        /// Generate a Unity Mesh object from this Morph.
+        /// </summary>
         public Mesh ToMesh()
         {
             Mesh mesh = new Mesh();
@@ -143,6 +162,19 @@ namespace Simplex
             return mesh;
         }
 
+        /// <summary>
+        /// Toggles whether this Morph will 'collapse colocated points' - meaing that Points in the same
+        /// position in space will get treated as single vertices of a resulting mesh. For meshes with sharp angles such as cubes,
+        /// this will likely result in weird shading because there'll only be one normal per vertex. However, the mesh will also be more compact,
+        /// and this effect is not noticable for smooth meshes such as spheres.
+        /// </summary>
+        public void SetCollapseColocatedPoints(bool collapseColocatedPoints)
+        {
+            m_collapseColocatedPoints = collapseColocatedPoints;
+        }
+
+        #region Points
+
         public IEnumerable<Point> Points
         {
             get
@@ -161,83 +193,90 @@ namespace Simplex
         }
 
         /// <summary>
-        /// This method implicitly accepts the given triangle,
-        /// and determines if the new triangle belongs to any faces.
+        /// Get the point with the given index.
         /// </summary>
-        private void Internal_AddTriangle(Triangle triangle)
+        public Point GetPoint(int pointIndex)
         {
-            m_hashes.AddTriangle(triangle);
-            m_lookups.AddTriangle(triangle);
+            return m_hashes.GetPoint(pointIndex);
+        }
 
-            bool addedToExistingFace = false;
-            foreach (Face face in m_hashes.Faces)
+        /// <summary>
+        /// Get a collection of all the points to which the given point is connected.
+        /// </summary>
+        public IEnumerable<Point> GetConnectedPoints(Point point)
+        {
+            foreach (int connected in m_lookups.ConnectedPoints(point.ID))
+                yield return m_hashes.GetPoint(connected);
+        }
+
+        /// <summary>
+        /// Get a collection of all the points to which the given point is connected.
+        /// </summary>
+        public IEnumerable<Point> GetConnectedPoints(int pointIndex)
+        {
+            Point point = m_hashes.GetPoint(pointIndex);
+
+            if (point == null)
+                yield break;
+
+            foreach (Point connected in GetConnectedPoints(point))
+                yield return connected;
+        }
+
+        /// <summary>
+        /// Tries to determine whether it's possible to draw a path from point A to 
+        /// point B, using a breadth-first-search.
+        /// </summary>
+        public bool IsConnected(Point a, Point b)
+        {
+            if (a == b)
+                return true;
+
+            return IsConnected(a.ID, b.ID);
+        }
+
+        /// <summary>
+        /// Tries to determine whether it's possible to draw a path from point A to 
+        /// point B, using a breadth-first-search.
+        /// </summary>
+        public bool IsConnected(int a, int b)
+        {
+            Debug.Assert(m_hashes.HasPoint(a) && m_hashes.HasPoint(b), "Both points A and B must be in the Morph.");
+
+            if (a == b)
+                return true;
+
+            Queue<int> queue = new Queue<int>();
+            HashSet<int> seen = new HashSet<int>();
+
+            queue.Enqueue(a);
+
+            while (queue.Count != 0)
             {
-                if (face.TryAddTriangle(triangle))
+                int current = queue.Dequeue();
+
+                // Get all connected points of the current point
+                // if a connected point has not been seen, then mark it seen 
+                // and enqueue it 
+                foreach (int connected in m_lookups.ConnectedPoints(current))
                 {
-                    addedToExistingFace = true;
-                    break;
+                    if (connected == b)
+                        return true;
+
+                    if (!seen.Contains(connected))
+                    {
+                        seen.Add(connected);
+                        queue.Enqueue(connected);
+                    }
                 }
             }
 
-            if (!addedToExistingFace)
-            {
-                Face face = new Face(triangle);
-
-                m_hashes.AddFace(face);
-                m_lookups.AddFace(face);
-            }
+            return false;
         }
 
-        /// <summary>
-        /// Add a new triangle connecting points a, b, and c, which are assumed to have a clockwise winding order.
-        /// </summary>
-        public void AddTriangle(Point a, Point b, Point c)
-        {
-            if (a.ID == -1)
-                m_hashes.AddPoint(a);
+        #endregion
 
-            if (b.ID == -1)
-                m_hashes.AddPoint(b);
-
-            if (c.ID == -1)
-                m_hashes.AddPoint(c);
-
-            Edge ab = new Edge(a, b);
-            Edge bc = new Edge(b, c);
-            Edge ca = new Edge(c, a);
-
-            AddEdge(ab, findNewTriangles: false);
-            AddEdge(bc, findNewTriangles: false);
-            AddEdge(ca, findNewTriangles: false);
-
-            Internal_AddTriangle(new Triangle(ab, bc, ca, a, b, c));
-        }
-
-        /// <summary>
-        /// Add a new triangle connecting points a, b, and c, which are assumed to have a clockwise winding order.
-        /// </summary>
-        public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
-        {
-            Point pointA = m_lookups.GetExistingPointInSameLocation(a);
-            Point pointB = m_lookups.GetExistingPointInSameLocation(b);
-            Point pointC = m_lookups.GetExistingPointInSameLocation(c);
-
-            AddTriangle(pointA, pointB, pointC);
-        }
-
-        /// <summary>
-        /// Add a new triangle connecting points a, b, and c (given by point ID), which are assumed to have a clockwise winding order.
-        /// </summary>
-        public void AddTriangle(int a, int b, int c)
-        {
-            Point pointA = m_hashes.GetPoint(a);
-            Point pointB = m_hashes.GetPoint(b);
-            Point pointC = m_hashes.GetPoint(c);
-
-            Debug.Assert(pointA != null && pointB != null && pointC != null, "All three points used to make a triangle must be in the Morph.");
-
-            AddTriangle(pointA, pointB, pointC);
-        }
+        #region Edges
 
         /// <summary>
         /// Add a new edge connecting point A to point B.
@@ -245,16 +284,7 @@ namespace Simplex
         public void AddEdge(Edge edge, bool findNewTriangles = true)
         {
             if (m_hashes.HasEdge(edge))
-            {
-                //Debug.Log("Already have the edge " + edge.ToString() + ", whose hashcode is " + edge.GetHashCode());
                 return;
-            }
-            //else
-            //{
-            //    Debug.Log("Adding new edge, whose hashcode is " + edge.GetHashCode());
-            //}
-
-            //Debug.Log("Adding edge " + edge.ToString());
 
             m_hashes.AddPoint(edge.A);
             m_hashes.AddPoint(edge.B);
@@ -348,14 +378,6 @@ namespace Simplex
         }
 
         /// <summary>
-        /// Get the point with the given index.
-        /// </summary>
-        public Point GetPoint(int pointIndex)
-        {
-            return m_hashes.GetPoint(pointIndex);
-        }
-
-        /// <summary>
         /// Get the edge connecting the points with the given idnex.
         /// </summary>
         public Edge GetEdge(int aIndex, int bIndex)
@@ -371,27 +393,87 @@ namespace Simplex
             return null;
         }
 
+        #endregion
+
+        #region Triangles
+
         /// <summary>
-        /// Get a collection of all the points to which the given point is connected.
+        /// Add a new triangle connecting points a, b, and c, which are assumed to have a clockwise winding order.
         /// </summary>
-        public IEnumerable<Point> GetConnectedPoints(Point point)
+        public void AddTriangle(Point a, Point b, Point c)
         {
-            foreach (int connected in m_lookups.ConnectedPoints(point.ID))
-                yield return m_hashes.GetPoint(connected);
+            if (a.ID == -1)
+                m_hashes.AddPoint(a);
+
+            if (b.ID == -1)
+                m_hashes.AddPoint(b);
+
+            if (c.ID == -1)
+                m_hashes.AddPoint(c);
+
+            Edge ab = new Edge(a, b);
+            Edge bc = new Edge(b, c);
+            Edge ca = new Edge(c, a);
+
+            AddEdge(ab, findNewTriangles: false);
+            AddEdge(bc, findNewTriangles: false);
+            AddEdge(ca, findNewTriangles: false);
+
+            Internal_AddTriangle(new Triangle(ab, bc, ca, a, b, c));
         }
 
         /// <summary>
-        /// Get a collection of all the points to which the given point is connected.
+        /// Add a new triangle connecting points a, b, and c, which are assumed to have a clockwise winding order.
         /// </summary>
-        public IEnumerable<Point> GetConnectedPoints(int pointIndex)
+        public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
         {
-            Point point = m_hashes.GetPoint(pointIndex);
+            Point pointA = m_lookups.GetExistingPointInSameLocation(a);
+            Point pointB = m_lookups.GetExistingPointInSameLocation(b);
+            Point pointC = m_lookups.GetExistingPointInSameLocation(c);
 
-            if (point == null)
-                yield break;
+            AddTriangle(pointA, pointB, pointC);
+        }
 
-            foreach (Point connected in GetConnectedPoints(point))
-                yield return connected;
+        /// <summary>
+        /// Add a new triangle connecting points a, b, and c (given by point ID), which are assumed to have a clockwise winding order.
+        /// </summary>
+        public void AddTriangle(int a, int b, int c)
+        {
+            Point pointA = m_hashes.GetPoint(a);
+            Point pointB = m_hashes.GetPoint(b);
+            Point pointC = m_hashes.GetPoint(c);
+
+            Debug.Assert(pointA != null && pointB != null && pointC != null, "All three points used to make a triangle must be in the Morph.");
+
+            AddTriangle(pointA, pointB, pointC);
+        }
+
+        /// <summary>
+        /// This method implicitly accepts the given triangle,
+        /// and determines if the new triangle belongs to any faces.
+        /// </summary>
+        private void Internal_AddTriangle(Triangle triangle)
+        {
+            m_hashes.AddTriangle(triangle);
+            m_lookups.AddTriangle(triangle);
+
+            bool addedToExistingFace = false;
+            foreach (Face face in m_hashes.Faces)
+            {
+                if (face.TryAddTriangle(triangle))
+                {
+                    addedToExistingFace = true;
+                    break;
+                }
+            }
+
+            if (!addedToExistingFace)
+            {
+                Face face = new Face(triangle);
+
+                m_hashes.AddFace(face);
+                m_lookups.AddFace(face);
+            }
         }
 
         /// <summary>
@@ -403,56 +485,23 @@ namespace Simplex
                 triangle.Flip();
         }
 
-        /// <summary>
-        /// Tries to determine whether it's possible to draw a path from point A to 
-        /// point B, using a breadth-first-search.
-        /// </summary>
-        public bool IsConnected(Point a, Point b)
+        #endregion
+
+        #region Faces
+
+        public IEnumerable<Face> Faces
         {
-            if (a == b)
-                return true;
-
-            return IsConnected(a.ID, b.ID);
-        }
-
-        /// <summary>
-        /// Tries to determine whether it's possible to draw a path from point A to 
-        /// point B, using a breadth-first-search.
-        /// </summary>
-        public bool IsConnected(int a, int b)
-        {
-            Debug.Assert(m_hashes.HasPoint(a) && m_hashes.HasPoint(b), "Both points A and B must be in the Morph.");
-
-            if (a == b)
-                return true;
-
-            Queue<int> queue = new Queue<int>();
-            HashSet<int> seen = new HashSet<int>();
-
-            queue.Enqueue(a);
-
-            while (queue.Count != 0)
+            get
             {
-                int current = queue.Dequeue();
-
-                // Get all connected points of the current point
-                // if a connected point has not been seen, then mark it seen 
-                // and enqueue it 
-                foreach (int connected in m_lookups.ConnectedPoints(current))
-                {
-                    if (connected == b)
-                        return true;
-
-                    if (!seen.Contains(connected))
-                    {
-                        seen.Add(connected);
-                        queue.Enqueue(connected);
-                    }
-                }
+                foreach (Face face in m_hashes.Faces)
+                    yield return face;
             }
-
-            return false;
         }
+
+        #endregion
+
+
+        #region Editor
 
 #if UNITY_EDITOR
         public void DrawGizmo(Transform transform = null)
@@ -477,6 +526,8 @@ namespace Simplex
             }
         }
 #endif
+
+        #endregion
 
         #region Primitive Classes
 
@@ -507,7 +558,7 @@ namespace Simplex
                     return UV != Vector2.zero || Normal != Vector3.zero || Tangent != Vector4.zero;
                 }
             }
-            
+
             public Point(Vector3 vector, Vector2 uv = default, Vector3 normal = default, Vector4 tangent = default)
             {
                 Position = vector;
@@ -558,7 +609,7 @@ namespace Simplex
 
                 Matrix4x4 originalHandleMatrix = Handles.matrix;
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
-                
+
                 Gizmos.color = (ID <= 2) ? Color.red : col;
                 Gizmos.DrawSphere(Position, (ID <= 2) ? radius * 1.5f : radius);
 
@@ -869,7 +920,7 @@ namespace Simplex
                     foreach (Edge other in triangle.Edges)
                         if (edge == other)
                             return true;
-                
+
                 return false;
             }
 
@@ -977,7 +1028,7 @@ namespace Simplex
             {
                 if (m_triangles.Contains(newTriangle))
                     return false;
-                
+
                 foreach (Triangle triangle in m_triangles)
                     if (triangle.IsContiguous(newTriangle))
                         return true;
@@ -1022,6 +1073,122 @@ namespace Simplex
                 return Normal == face.Normal;
             }
 
+            /// <summary>
+            /// Return a list of all the points in this face.
+            /// </summary>
+            public List<Point> GetPoints(Matrix4x4 matrix = default)
+            {
+                HashSet<Point> points = new HashSet<Point>();
+
+                foreach (Triangle triangle in Triangles)
+                    foreach (Point point in triangle.Points)
+                        points.Add(point);
+
+                return points.ToList();
+            }
+
+            /// <summary>
+            /// Generate a list of Points which defines the perimeter of this face in clockwise winding order.
+            /// 
+            /// This may be problematic on a Morph which is not collapse colocated points.
+            /// </summary>
+            public List<Point> GetPerimeter()
+            {
+                List<Point> points = GetPoints();
+
+                List<Point> perimeter = new List<Point>();
+
+                // to make maths easier, this quaternion turns our maths 2D
+                Quaternion normalizingRotation = Quaternion.FromToRotation(Normal, -Vector3.forward);
+
+                // STEP 1: Find the leftmost (and if necessary, bottommost) point and start there
+
+                Point leftMost = null;
+                float leastX = Mathf.Infinity;
+                float leastY = Mathf.Infinity;
+
+                for (int i = 0; i < points.Count; i++)
+                {
+                    Vector2 _2dPos = normalizingRotation * points[i].Position;
+                    if (_2dPos.x == leastX)
+                    {
+                        if (_2dPos.y < leastY)
+                        {
+                            leftMost = points[i];
+                            leastY = _2dPos.y;
+                        }
+                    }
+                    else if (_2dPos.x < leastX)
+                    {
+                        leftMost = points[i];
+                        leastX = _2dPos.x;
+                        leastY = _2dPos.y;
+                    }
+                }
+
+                if (leftMost == null)
+                {
+                    Debug.LogError("Couldn't find a start point for perimeter calculation! Does your face have any points?");
+                    return null;
+                }
+
+                perimeter.Add(leftMost);
+
+                // STEP 2: Now that we have an algorithm, the tracing part can begin. Essentially, take the last point,
+                // 'swoop' around anticlockwise from the bottom until we hit the next point, and then use that. keep going until
+                // our current point matches our starting point
+
+                Vector2 referenceDirection = Vector2.down;
+                Point start = perimeter[perimeter.Count - 1];
+                Point current = start;
+
+                int tempSafety = 0;
+
+                while (++tempSafety < 1000)
+                {
+                    float bestAngle = -Mathf.Infinity;
+                    float bestDistance = Mathf.Infinity;
+                    Point bestPoint = null;
+
+                    for (int i = 0; i < points.Count; i++)
+                    {
+                        // don't ever look back!
+                        if (points[i] == current)
+                            continue;
+
+                        float angle = Vector2.SignedAngle(referenceDirection, ((normalizingRotation * points[i].Position) - (normalizingRotation * current.Position)).normalized);
+
+                        if (angle > bestAngle)
+                        {
+                            bestAngle = angle;
+                            bestPoint = points[i];
+                            bestDistance = (points[i].Position - current.Position).sqrMagnitude;
+                        }
+                        else if (angle == bestAngle)
+                        {
+                            float sqrDist = (points[i].Position - current.Position).sqrMagnitude;
+
+                            if (sqrDist < bestDistance)
+                            {
+                                bestPoint = points[i];
+                                bestDistance = sqrDist;
+                            }
+                        }
+                    }
+
+                    referenceDirection = ((normalizingRotation * current.Position) - (normalizingRotation * bestPoint.Position)).normalized;
+                    
+                    current = bestPoint;
+
+                    if (current == start)
+                        break;
+
+                    perimeter.Add(current);
+                }
+
+                return perimeter;
+            }
+
             public void Retriangulate()
             {
                 throw new System.NotImplementedException();
@@ -1058,17 +1225,7 @@ namespace Simplex
                 // TODO: transform this by the matrix above
                 Vector3 normal = Normal;
 
-                foreach (Triangle triangle in m_triangles)
-                {
-                    Vector3[] vertices = triangle.GetPointsArray();
-
-                    for (int i = 0; i < vertices.Length; i++)
-                    {
-                        vertices[i] += normal * 0.6f;
-                    }
-
-                    Handles.DrawAAConvexPolygon(vertices);
-                }
+                Handles.DrawAAConvexPolygon(GetPerimeter().Select(p => p.Position + normal * 0.6f).ToArray());
 
                 //Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
@@ -1144,6 +1301,7 @@ namespace Simplex
                         yield return triangle;
                 }
             }
+
             public int FaceCount
             {
                 get
@@ -1151,6 +1309,7 @@ namespace Simplex
                     return m_faces.Count;
                 }
             }
+
             public IEnumerable<Face> Faces
             {
                 get

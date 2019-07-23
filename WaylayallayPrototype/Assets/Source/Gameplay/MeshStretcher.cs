@@ -308,9 +308,9 @@ public class MeshStretcher
     /// </summary>
     public Graph.Partition TryBisectEdge(Vector3 a, Vector3 b, Vector2 aUV, Vector2 bUV, Vector3 aNormal, Vector3 bNormal, out Vector2 intersectionUV, out Vector3 intersection, out Vector3 intersectionNormal)
     {
-        intersection = default(Vector3);
-        intersectionUV = default(Vector2);
-        intersectionNormal = default(Vector3);
+        intersection = default;
+        intersectionUV = default;
+        intersectionNormal = default;
 
         Plane plane = BisectionPlane;
 
@@ -319,10 +319,9 @@ public class MeshStretcher
 
         if (isAPositive != isBPositive)
         {
-            float enter;
             Ray ray = new Ray(a, (b - a).normalized);
 
-            if (plane.Raycast(ray, out enter))
+            if (plane.Raycast(ray, out float enter))
                 intersection = ray.GetPoint(enter);
 
             float t = Vector3.Distance(a, intersection) / Vector3.Distance(a, b);
