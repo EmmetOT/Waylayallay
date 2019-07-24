@@ -596,6 +596,23 @@ namespace Simplex
                 return Position.HashVector3();
             }
 
+            /// <summary>
+            /// Transforms this point as if it's on the 2d plane and its z component doesn't matter,
+            /// accorsding to the given normal.
+            /// </summary>
+            public Vector2 To2D(Vector3 normal)
+            {
+                return RotateBy(Quaternion.FromToRotation(normal, -Vector3.forward));
+            }
+
+            /// <summary>
+            /// Transforms this point by the given rotation.
+            /// </summary>
+            public Vector3 RotateBy(Quaternion rotation)
+            {
+                return rotation * Position;
+            }
+
             public override string ToString()
             {
                 return "[" + ID + "] " + Position.ToString();
@@ -1109,7 +1126,7 @@ namespace Simplex
 
                 for (int i = 0; i < points.Count; i++)
                 {
-                    Vector2 _2dPos = normalizingRotation * points[i].Position;
+                    Vector2 _2dPos = points[i].RotateBy(normalizingRotation);
                     if (_2dPos.x == leastX)
                     {
                         if (_2dPos.y < leastY)
@@ -1156,7 +1173,7 @@ namespace Simplex
                         if (points[i] == current)
                             continue;
 
-                        float angle = Vector2.SignedAngle(referenceDirection, ((normalizingRotation * points[i].Position) - (normalizingRotation * current.Position)).normalized);
+                        float angle = Vector2.SignedAngle(referenceDirection, (points[i].RotateBy(normalizingRotation) - current.RotateBy(normalizingRotation)).normalized);
 
                         if (angle > bestAngle)
                         {
@@ -1176,7 +1193,7 @@ namespace Simplex
                         }
                     }
 
-                    referenceDirection = ((normalizingRotation * current.Position) - (normalizingRotation * bestPoint.Position)).normalized;
+                    referenceDirection = (current.RotateBy(normalizingRotation) - bestPoint.RotateBy(normalizingRotation)).normalized;
                     
                     current = bestPoint;
 
@@ -1189,8 +1206,18 @@ namespace Simplex
                 return perimeter;
             }
 
-            public void Retriangulate()
+
+            public bool Retriangulate(List<Triangle> result)
             {
+                List<Point> perimeter = GetPerimeter();
+                int triangleCount = m_triangles.Count;
+
+                // triangulation can't get any better
+                if (perimeter.Count - triangleCount <= 2)
+                    return false;
+                
+
+
                 throw new System.NotImplementedException();
             }
 
