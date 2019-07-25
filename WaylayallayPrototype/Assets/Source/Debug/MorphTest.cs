@@ -6,6 +6,42 @@ using NaughtyAttributes;
 
 public class MorphTest : MonoBehaviour
 {
+    public bool HasMorph
+    {
+        get
+        {
+            return m_morph != null;
+        }
+    }
+
+    public int PointCount
+    {
+        get
+        {
+            if (!HasMorph)
+                return 0;
+
+            return m_morph.PointCount;
+        }
+    }
+
+    public Vector3 GetPoint(int i)
+    {
+        Morph.Point point = m_morph.GetPoint(i);
+        return point == null ? default : point.LocalPosition;
+    }
+
+    public void SetPoint(int i, Vector3 vec)
+    {
+        m_morph.GetPoint(i).LocalPosition = vec;
+        m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
+    }
+    
+    [SerializeField]
+    private Morph m_morph;
+    public Morph Morph { get { return m_morph; } }
+
+
     [SerializeField]
     [OnValueChanged("Reinit")]
     private bool m_collapseColocatedPoints = false;
@@ -23,9 +59,6 @@ public class MorphTest : MonoBehaviour
 
     [SerializeField]
     private bool m_drawGizmos = false;
-
-    [SerializeField]
-    private Morph m_morph;
 
     [SerializeField]
     private Vector3 m_testVecA;
@@ -64,7 +97,7 @@ public class MorphTest : MonoBehaviour
     public void Reinit()
     {
         Material[] mats = m_testMeshes[0].GetComponent<Renderer>().sharedMaterials;
-        m_morph = new Morph(m_testMeshes);
+        m_morph = new Morph(m_collapseColocatedPoints, m_testMeshes);
 
         for (int i = 0; i < m_testMeshes.Length; i++)
             m_testMeshes[i].gameObject.SetActive(false);
@@ -133,7 +166,7 @@ public class MorphTest : MonoBehaviour
         if (m_morph == null)
             return;
 
-        m_morph.GetPoint(0).Position += Vector3.right * 0.1f;
+        m_morph.GetPoint(0).LocalPosition += Vector3.right * 0.1f;
     }
 
     private void Update()
@@ -145,7 +178,7 @@ public class MorphTest : MonoBehaviour
         {
             m_movingPoint = m_movingPoint % m_morph.PointCount;
 
-            m_morph.GetPoint(m_movingPoint).Position += Vector3.right * Time.deltaTime * m_moveSpeed;
+            m_morph.GetPoint(m_movingPoint).LocalPosition += Vector3.right * Time.deltaTime * m_moveSpeed;
 
             m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
         }
@@ -173,185 +206,182 @@ public class MorphTest : MonoBehaviour
     private Morph.Face GetFace()
     {
         foreach (Morph.Face face in m_morph.Faces)
-        {
             return face;
-        }
 
         return null;
     }
 
-    private void OnDrawGizmos()
-    {
-        if (!m_drawGizmos || !Application.isPlaying)
-            return;
+    //private void OnDrawGizmos()
+    //{
+    //    if (!m_drawGizmos || !Application.isPlaying)
+    //        return;
 
-        if (m_morph != null)
-        {
-            m_morph.DrawFaces(m_resultMeshFilter?.transform);
+    //    if (m_morph != null)
+    //    {
+    //        m_morph.DrawGizmo(transform);
+    //        //m_morph.DrawFaces(transform);
 
-            //Gizmos.color = Color.black;
+    //        //Gizmos.color = Color.black;
 
-            //List<Morph.Point> perimeter = GetPerimeter();
+    //        List<Morph.Point> perimeter = GetPerimeter();
 
-            //if (!perimeter.IsNullOrEmpty())
-            //{
-            //    Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
-            //    Gizmos.matrix = m_resultMeshFilter.transform.localToWorldMatrix;
+    //        if (!perimeter.IsNullOrEmpty())
+    //        {
+    //            Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
+    //            Gizmos.matrix = m_resultMeshFilter.transform.localToWorldMatrix;
 
-            //    foreach (Morph.Point point in perimeter)
-            //    {
-            //        Gizmos.DrawSphere(point.Position, 0.4f);
-            //    }
+    //            foreach (Morph.Point point in perimeter)
+    //                Gizmos.DrawSphere(point.LocalPosition, 0.1f);
 
-            //    Gizmos.matrix = originalGizmoMatrix;
-            //}
+    //            Gizmos.matrix = originalGizmoMatrix;
+    //        }
 
-            //DrawPerimeterCalc();
-        }
-    }
+    //        //DrawPerimeterCalc();
+    //    }
+    //}
 
-    private void DrawPerimeterCalc()
-    {
-        if (!m_drawGizmos || !Application.isPlaying || m_morph == null || GetPerimeter() == null || m_resultMeshFilter == null)
-            return;
+    //private void DrawPerimeterCalc()
+    //{
+    //    if (!m_drawGizmos || !Application.isPlaying || m_morph == null || GetPerimeter() == null || m_resultMeshFilter == null)
+    //        return;
 
-        Morph.Face face = GetFace();
+    //    Morph.Face face = GetFace();
 
-        if (face == null)
-            return;
+    //    if (face == null)
+    //        return;
 
-        List<Morph.Point> points = face.GetPoints();
+    //    List<Morph.Point> points = face.GetPoints();
 
-        List<Morph.Point> perimeter = new List<Morph.Point>();
+    //    List<Morph.Point> perimeter = new List<Morph.Point>();
 
-        // to make maths easier, this quaternion turns our maths 2D
-        Quaternion normalizingRotation = Quaternion.FromToRotation(face.Normal, -Vector3.forward);
+    //    // to make maths easier, this quaternion turns our maths 2D
+    //    Quaternion normalizingRotation = Quaternion.FromToRotation(face.Normal, -Vector3.forward);
 
-        Gizmos.color = Color.red;
+    //    Gizmos.color = Color.red;
 
-        Vector2 _2dPos;
-        for (int i = 0; i < points.Count; i++)
-        {
-            _2dPos = normalizingRotation * points[i].Position;
-            Gizmos.DrawSphere(_2dPos, 0.2f);
-        }
+    //    Vector2 _2dPos;
+    //    for (int i = 0; i < points.Count; i++)
+    //    {
+    //        _2dPos = normalizingRotation * points[i].LocalPosition;
+    //        Gizmos.DrawSphere(_2dPos, 0.2f);
+    //    }
 
-        // STEP 1: Find the leftmost (and if necessary, bottommost) point and start there
+    //    // STEP 1: Find the leftmost (and if necessary, bottommost) point and start there
 
-        Morph.Point leftMost = null;
-        float leastX = Mathf.Infinity;
-        float leastY = Mathf.Infinity;
+    //    Morph.Point leftMost = null;
+    //    float leastX = Mathf.Infinity;
+    //    float leastY = Mathf.Infinity;
 
-        for (int i = 0; i < points.Count; i++)
-        {
-            _2dPos = normalizingRotation * points[i].Position;
-            if (_2dPos.x == leastX)
-            {
-                if (_2dPos.y < leastY)
-                {
-                    leftMost = points[i];
-                    leastY = _2dPos.y;
-                }
-            }
-            else if (_2dPos.x < leastX)
-            {
-                leftMost = points[i];
-                leastX = _2dPos.x;
-                leastY = _2dPos.y;
-            }
-        }
+    //    for (int i = 0; i < points.Count; i++)
+    //    {
+    //        _2dPos = normalizingRotation * points[i].LocalPosition;
+    //        if (_2dPos.x == leastX)
+    //        {
+    //            if (_2dPos.y < leastY)
+    //            {
+    //                leftMost = points[i];
+    //                leastY = _2dPos.y;
+    //            }
+    //        }
+    //        else if (_2dPos.x < leastX)
+    //        {
+    //            leftMost = points[i];
+    //            leastX = _2dPos.x;
+    //            leastY = _2dPos.y;
+    //        }
+    //    }
 
-        perimeter.Add(leftMost);
+    //    perimeter.Add(leftMost);
 
-        Vector2 referenceDirection = Vector2.down;
-        Morph.Point start = perimeter[perimeter.Count - 1];
-        Morph.Point current = start;
+    //    Vector2 referenceDirection = Vector2.down;
+    //    Morph.Point start = perimeter[perimeter.Count - 1];
+    //    Morph.Point current = start;
 
-        Gizmos.color = Color.blue;
-        _2dPos = normalizingRotation * current.Position;
-        Gizmos.DrawSphere(_2dPos, 0.4f);
+    //    Gizmos.color = Color.blue;
+    //    _2dPos = normalizingRotation * current.LocalPosition;
+    //    Gizmos.DrawSphere(_2dPos, 0.4f);
 
-        float bestAngle;
-        float bestDistance;
-        Morph.Point bestPoint;
+    //    float bestAngle;
+    //    float bestDistance;
+    //    Morph.Point bestPoint;
 
-        // iteration 1
+    //    // iteration 1
 
-        bestAngle = -Mathf.Infinity;
-        bestDistance = Mathf.Infinity;
-        bestPoint = null;
+    //    bestAngle = -Mathf.Infinity;
+    //    bestDistance = Mathf.Infinity;
+    //    bestPoint = null;
 
-        for (int i = 0; i < points.Count; i++)
-        {
-            // don't ever look back!
-            if (points[i] == current)
-                continue;
+    //    for (int i = 0; i < points.Count; i++)
+    //    {
+    //        // don't ever look back!
+    //        if (points[i] == current)
+    //            continue;
 
-            float angle = Vector2.SignedAngle(referenceDirection, ((normalizingRotation * points[i].Position) - (normalizingRotation * current.Position)).normalized);
+    //        float angle = Vector2.SignedAngle(referenceDirection, ((normalizingRotation * points[i].LocalPosition) - (normalizingRotation * current.LocalPosition)).normalized);
             
-            if (angle > bestAngle)
-            {
-                bestAngle = angle;
-                bestPoint = points[i];
-                bestDistance = (points[i].Position - current.Position).sqrMagnitude;
-            }
-            else if (angle == bestAngle)
-            {
-                float sqrDist = (points[i].Position - current.Position).sqrMagnitude;
+    //        if (angle > bestAngle)
+    //        {
+    //            bestAngle = angle;
+    //            bestPoint = points[i];
+    //            bestDistance = (points[i].LocalPosition - current.LocalPosition).sqrMagnitude;
+    //        }
+    //        else if (angle == bestAngle)
+    //        {
+    //            float sqrDist = (points[i].LocalPosition - current.LocalPosition).sqrMagnitude;
 
-                if (sqrDist < bestDistance)
-                {
-                    bestPoint = points[i];
-                    bestDistance = sqrDist;
-                }
-            }
-        }
+    //            if (sqrDist < bestDistance)
+    //            {
+    //                bestPoint = points[i];
+    //                bestDistance = sqrDist;
+    //            }
+    //        }
+    //    }
         
-        referenceDirection = ((normalizingRotation * current.Position) - (normalizingRotation * bestPoint.Position)).normalized;
-        current = bestPoint;
+    //    referenceDirection = ((normalizingRotation * current.LocalPosition) - (normalizingRotation * bestPoint.LocalPosition)).normalized;
+    //    current = bestPoint;
 
-        Gizmos.color = Color.blue;
-        _2dPos = normalizingRotation * current.Position;
-        Gizmos.DrawSphere(_2dPos, 0.4f);
+    //    Gizmos.color = Color.blue;
+    //    _2dPos = normalizingRotation * current.LocalPosition;
+    //    Gizmos.DrawSphere(_2dPos, 0.4f);
 
-        // iteration 2
+    //    // iteration 2
 
-        bestAngle = -Mathf.Infinity;
-        bestDistance = Mathf.Infinity;
-        bestPoint = null;
+    //    bestAngle = -Mathf.Infinity;
+    //    bestDistance = Mathf.Infinity;
+    //    bestPoint = null;
 
-        for (int i = 0; i < points.Count; i++)
-        {
-            // don't ever look back!
-            if (points[i] == current)
-                continue;
+    //    for (int i = 0; i < points.Count; i++)
+    //    {
+    //        // don't ever look back!
+    //        if (points[i] == current)
+    //            continue;
 
-            float angle = Vector2.SignedAngle(referenceDirection, ((normalizingRotation * points[i].Position) - (normalizingRotation * current.Position)).normalized);
+    //        float angle = Vector2.SignedAngle(referenceDirection, ((normalizingRotation * points[i].LocalPosition) - (normalizingRotation * current.LocalPosition)).normalized);
 
-            if (angle > bestAngle)
-            {
-                bestAngle = angle;
-                bestPoint = points[i];
-                bestDistance = (points[i].Position - current.Position).sqrMagnitude;
-            }
-            else if (angle == bestAngle)
-            {
-                float sqrDist = (points[i].Position - current.Position).sqrMagnitude;
+    //        if (angle > bestAngle)
+    //        {
+    //            bestAngle = angle;
+    //            bestPoint = points[i];
+    //            bestDistance = (points[i].LocalPosition - current.LocalPosition).sqrMagnitude;
+    //        }
+    //        else if (angle == bestAngle)
+    //        {
+    //            float sqrDist = (points[i].LocalPosition - current.LocalPosition).sqrMagnitude;
 
-                if (sqrDist < bestDistance)
-                {
-                    bestPoint = points[i];
-                    bestDistance = sqrDist;
-                }
-            }
-        }
+    //            if (sqrDist < bestDistance)
+    //            {
+    //                bestPoint = points[i];
+    //                bestDistance = sqrDist;
+    //            }
+    //        }
+    //    }
 
-        referenceDirection = ((normalizingRotation * bestPoint.Position) - (normalizingRotation * current.Position)).normalized;
-        current = bestPoint;
+    //    referenceDirection = ((normalizingRotation * bestPoint.LocalPosition) - (normalizingRotation * current.LocalPosition)).normalized;
+    //    current = bestPoint;
 
-        Gizmos.color = Color.blue;
-        _2dPos = normalizingRotation * current.Position;
-        Gizmos.DrawSphere(_2dPos, 0.4f);
+    //    Gizmos.color = Color.blue;
+    //    _2dPos = normalizingRotation * current.LocalPosition;
+    //    Gizmos.DrawSphere(_2dPos, 0.4f);
 
-    }
+    //}
 }

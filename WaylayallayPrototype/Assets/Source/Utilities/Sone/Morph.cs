@@ -28,13 +28,13 @@ namespace Simplex
             m_lookups = new Lookups(m_collapseColocatedPoints);
         }
 
-        public Morph(params MeshFilter[] meshes) : this()
+        public Morph(bool collapseColocatedPoints = false, params MeshFilter[] meshes) : this(collapseColocatedPoints)
         {
             for (int i = 0; i < meshes.Length; i++)
                 AddMesh(meshes[i]);
         }
 
-        public Morph(params Mesh[] meshes) : this()
+        public Morph(bool collapseColocatedPoints = false, params Mesh[] meshes) : this(collapseColocatedPoints)
         {
             for (int i = 0; i < meshes.Length; i++)
                 AddMesh(meshes[i]);
@@ -127,7 +127,7 @@ namespace Simplex
             foreach (Point point in m_hashes.Points)
             {
                 points[i] = point;
-                vertices[i] = point.Position;
+                vertices[i] = point.LocalPosition;
                 uvs[i] = point.UV;
                 normals[i] = point.Normal;
                 tangents[i] = point.Tangent;
@@ -188,7 +188,7 @@ namespace Simplex
         {
             get
             {
-                return m_hashes.PointCount;
+                return m_hashes == null ? 0 : m_hashes.PointCount;
             }
         }
 
@@ -320,7 +320,7 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(Point a, Point b, bool findNewTriangles = true)
         {
-            Assert.AreNotEqual(a.Position, b.Position);
+            Assert.AreNotEqual(a.LocalPosition, b.LocalPosition);
 
             Edge edge = new Edge(a, b);
             AddEdge(edge, findNewTriangles);
@@ -346,7 +346,7 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(Point a, Vector3 b, bool findNewTriangles = true)
         {
-            Assert.AreNotEqual(a.Position, b);
+            Assert.AreNotEqual(a.LocalPosition, b);
 
             Edge edge = new Edge(a, m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
             AddEdge(edge, findNewTriangles);
@@ -359,7 +359,7 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(Vector3 a, Point b, bool findNewTriangles = true)
         {
-            Assert.AreNotEqual(a, b.Position);
+            Assert.AreNotEqual(a, b.LocalPosition);
 
             Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), b);
             AddEdge(edge, findNewTriangles);
@@ -463,7 +463,13 @@ namespace Simplex
                 if (face.TryAddTriangle(triangle))
                 {
                     addedToExistingFace = true;
+
+                    // TODO - what if this triangle bridges 2 faces?
                     break;
+                }
+                else
+                {
+                    Debug.Log("Failed to add " + triangle.ID);
                 }
             }
 
@@ -509,6 +515,7 @@ namespace Simplex
             foreach (Triangle triangle in m_hashes.Triangles)
                 triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
 
+            // orphans :(
             foreach (Edge edge in m_hashes.Edges)
                 if (!m_lookups.IsEdgeInTriangle(edge))
                     edge.DrawGizmo(Color.red, transform: transform);
@@ -520,7 +527,7 @@ namespace Simplex
             {
                 int hash = face.GetHashCode();
 
-                Color col = new Color((Mathf.Abs(hash) % 255f) / 255f, (Mathf.Abs(hash * 3f) % 255f) / 255f, (Mathf.Abs(hash * 5f) % 255f) / 255f);
+                Color col = new Color((Mathf.Abs(hash) % 255f) / 255f, (Mathf.Abs(hash * 3f) % 255f) / 255f, (Mathf.Abs(hash * 5f) % 255f) / 255f, 0.3f);
 
                 face.DrawGizmo(col, transform);
             }
@@ -541,7 +548,7 @@ namespace Simplex
         [System.Serializable]
         public class Point
         {
-            public Vector3 Position { get; set; }
+            public Vector3 LocalPosition { get; set; }
             public Vector2 UV { get; private set; }
             public Vector3 Normal { get; private set; }
             public Vector4 Tangent { get; private set; }
@@ -561,7 +568,7 @@ namespace Simplex
 
             public Point(Vector3 vector, Vector2 uv = default, Vector3 normal = default, Vector4 tangent = default)
             {
-                Position = vector;
+                LocalPosition = vector;
                 UV = uv;
                 Normal = normal;
                 Tangent = tangent;
@@ -593,7 +600,7 @@ namespace Simplex
             /// </summary>
             public int GetLocationID()
             {
-                return Position.HashVector3();
+                return LocalPosition.HashVector3();
             }
 
             /// <summary>
@@ -605,21 +612,56 @@ namespace Simplex
                 return RotateBy(Quaternion.FromToRotation(normal, -Vector3.forward));
             }
 
+            public Vector3 GetWorldPosition(Matrix4x4 localToWorldMatrix)
+            {
+                return localToWorldMatrix * LocalPosition;
+            }
+
             /// <summary>
             /// Transforms this point by the given rotation.
             /// </summary>
             public Vector3 RotateBy(Quaternion rotation)
             {
-                return rotation * Position;
+                return rotation * LocalPosition;
             }
 
             public override string ToString()
             {
-                return "[" + ID + "] " + Position.ToString();
+                return "[" + ID + "] " + LocalPosition.ToString();
+            }
+
+            public static bool operator ==(Point point1, Point point2)
+            {
+                if (point1 is null)
+                    return point2 is null;
+                else if (point2 is null)
+                    return false;
+
+                return point1.GetLocationID() == point2.GetLocationID();
+            }
+
+            public static bool operator !=(Point point1, Point point2)
+            {
+                return !(point1 == point2);
+            }
+
+            public override bool Equals(object obj)
+            {
+                Point other = obj as Point;
+
+                if (other == null)
+                    return false;
+
+                return ID == other.ID;
+            }
+
+            public override int GetHashCode()
+            {
+                return ID;
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color col, float radius = 0.05f, bool label = true, Transform transform = null)
+            public void DrawGizmo(Color col, float radius = 0.025f, bool label = true, Transform transform = null)
             {
                 Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
                 Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
@@ -627,14 +669,7 @@ namespace Simplex
                 Matrix4x4 originalHandleMatrix = Handles.matrix;
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
-                Gizmos.color = (ID <= 2) ? Color.red : col;
-                Gizmos.DrawSphere(Position, (ID <= 2) ? radius * 1.5f : radius);
-
-                if (ID > 2 && ID <= 5)
-                {
-                    Gizmos.color = Color.blue;
-                    Gizmos.DrawSphere(Position, radius * 1.5f);
-                }
+                Gizmos.DrawSphere(LocalPosition, radius);
 
                 if (label)
                 {
@@ -642,13 +677,13 @@ namespace Simplex
                     handleStyle.normal.textColor = Color.white;
                     handleStyle.fontSize = 30;
 
-                    Handles.Label(Position + Normal * 0.15f, ID.ToString(), handleStyle);
+                    Handles.Label(LocalPosition + Normal * 0.15f, ID.ToString(), handleStyle);
 
                     handleStyle = new GUIStyle();
                     handleStyle.normal.textColor = Color.black;
                     handleStyle.fontSize = 10;
 
-                    Handles.Label(Position + Normal * 0.15f + Vector3.up * 0.2f, UV.ToString(), handleStyle);
+                    Handles.Label(LocalPosition + Normal * 0.15f + Vector3.up * 0.2f, UV.ToString(), handleStyle);
                 }
 
                 Gizmos.matrix = originalGizmoMatrix;
@@ -750,6 +785,11 @@ namespace Simplex
 
             public static bool operator ==(Edge edge1, Edge edge2)
             {
+                if (edge1 is null)
+                    return edge2 is null;
+                else if (edge2 is null)
+                    return false;
+
                 int _1a = edge1.A.GetLocationID();
                 int _1b = edge1.B.GetLocationID();
 
@@ -774,7 +814,7 @@ namespace Simplex
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
                 Gizmos.color = edgeCol;
-                Gizmos.DrawLine(A.Position, B.Position);
+                Gizmos.DrawLine(A.LocalPosition, B.LocalPosition);
 
                 A.DrawGizmo(pointCol, radius, label, transform);
                 B.DrawGizmo(pointCol, radius, label, transform);
@@ -807,12 +847,14 @@ namespace Simplex
 
             private bool m_flippedNormal = false;
 
+            public int ID { get; private set; } = -1;
+
             public Vector3 Normal
             {
                 get
                 {
-                    Vector3 side1 = B.Position - A.Position;
-                    Vector3 side2 = C.Position - A.Position;
+                    Vector3 side1 = B.LocalPosition - A.LocalPosition;
+                    Vector3 side2 = C.LocalPosition - A.LocalPosition;
 
                     return Vector3.Cross(side1, side2).normalized * (m_flippedNormal ? -1 : 1);
                 }
@@ -822,7 +864,7 @@ namespace Simplex
             {
                 get
                 {
-                    return (A.Position + B.Position + C.Position) * 0.3333f;
+                    return (A.LocalPosition + B.LocalPosition + C.LocalPosition) * 0.3333f;
                 }
             }
 
@@ -885,7 +927,7 @@ namespace Simplex
                 else
                     C = BC.A;
 
-                Debug.Assert((A.Position != B.Position) && (B.Position != C.Position) && (C.Position != A.Position), "Can't have a triangle where two or more points are equal!");
+                Debug.Assert((A.LocalPosition != B.LocalPosition) && (B.LocalPosition != C.LocalPosition) && (C.LocalPosition != A.LocalPosition), "Can't have a triangle where two or more points are equal!");
 
                 //Debug.Log("Created triangle connecting " + ab.ToString() + ", " + bc.ToString() + ", " + ca.ToString() + ", whose centroid is " + Centroid + ", and whose normal is " + Normal);
                 //Debug.Log("A = " + A.Position);
@@ -907,7 +949,15 @@ namespace Simplex
                 B = b;
                 C = c;
 
-                Debug.Assert((A.Position != B.Position) && (B.Position != C.Position) && (C.Position != A.Position), "Can't have a triangle where two or more points are equal!");
+                Debug.Assert((A.LocalPosition != B.LocalPosition) && (B.LocalPosition != C.LocalPosition) && (C.LocalPosition != A.LocalPosition), "Can't have a triangle where two or more points are equal!");
+            }
+
+            /// <summary>
+            /// Set this triangle's unique ID.
+            /// </summary>
+            public void SetID(int id)
+            {
+                ID = id;
             }
 
             /// <summary>
@@ -915,7 +965,7 @@ namespace Simplex
             /// </summary>
             public Vector3[] GetPointsArray()
             {
-                return new Vector3[] { this[0].Position, this[1].Position, this[2].Position };
+                return new Vector3[] { this[0].LocalPosition, this[1].LocalPosition, this[2].LocalPosition };
             }
 
             /// <summary>
@@ -936,6 +986,11 @@ namespace Simplex
                 foreach (Edge edge in Edges)
                     foreach (Edge other in triangle.Edges)
                         if (edge == other)
+                            return true;
+
+                foreach (Point point in Points)
+                    foreach (Point other in triangle.Points)
+                        if (point == other)
                             return true;
 
                 return false;
@@ -963,13 +1018,13 @@ namespace Simplex
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color pointCol, Color edgeCol, Color normalCol, float normalScale = 0.1f, float radius = 0.05f, Transform transform = null)
+            public void DrawGizmo(Color pointCol, Color edgeCol, Color normalCol, bool label = true, float normalScale = 0.1f, float radius = 0.025f, Transform transform = null)
             {
                 foreach (Point point in Points)
-                    point.DrawGizmo(pointCol, radius, transform: transform);
+                    point.DrawGizmo(pointCol, radius, label: false, transform: transform);
 
                 foreach (Edge edge in Edges)
-                    edge.DrawGizmo(edgeCol, radius: radius, transform: transform);
+                    edge.DrawGizmo(edgeCol, radius: radius, label: false, transform: transform);
 
                 Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
                 Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
@@ -979,6 +1034,12 @@ namespace Simplex
 
                 Gizmos.color = normalCol;
                 Gizmos.DrawLine(Centroid, Centroid + Normal * normalScale);
+
+                GUIStyle handleStyle = new GUIStyle();
+                handleStyle.normal.textColor = Color.black;
+                handleStyle.fontSize = 20;
+
+                Handles.Label(Centroid + Normal * 0.15f, ID.ToString(), handleStyle);
 
                 Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
@@ -1028,7 +1089,7 @@ namespace Simplex
             /// </summary>
             public bool TryAddTriangle(Triangle newTriangle)
             {
-                if (!m_triangles.Contains(newTriangle) && IsConormal(newTriangle) && IsContiguous(newTriangle))
+                if (!m_triangles.Contains(newTriangle) && newTriangle.IsSameFace(newTriangle))
                 {
                     m_triangles.Add(newTriangle);
                     return true;
@@ -1179,11 +1240,11 @@ namespace Simplex
                         {
                             bestAngle = angle;
                             bestPoint = points[i];
-                            bestDistance = (points[i].Position - current.Position).sqrMagnitude;
+                            bestDistance = (points[i].LocalPosition - current.LocalPosition).sqrMagnitude;
                         }
                         else if (angle == bestAngle)
                         {
-                            float sqrDist = (points[i].Position - current.Position).sqrMagnitude;
+                            float sqrDist = (points[i].LocalPosition - current.LocalPosition).sqrMagnitude;
 
                             if (sqrDist < bestDistance)
                             {
@@ -1194,7 +1255,7 @@ namespace Simplex
                     }
 
                     referenceDirection = (current.RotateBy(normalizingRotation) - bestPoint.RotateBy(normalizingRotation)).normalized;
-                    
+
                     current = bestPoint;
 
                     if (current == start)
@@ -1211,14 +1272,30 @@ namespace Simplex
             {
                 List<Point> perimeter = GetPerimeter();
                 int triangleCount = m_triangles.Count;
+                int n = perimeter.Count;
 
-                // triangulation can't get any better
-                if (perimeter.Count - triangleCount <= 2)
-                    return false;
-                
-
-
+               
                 throw new System.NotImplementedException();
+            }
+
+            public float CalculateArea(List<Point> perimeter = null)
+            {
+                return CalculateArea(perimeter ?? GetPerimeter(), Normal);
+            }
+
+            public static float CalculateArea(List<Point> perimeter, Vector3 normal)
+            {
+                int n = perimeter.Count;
+                float area = 0f;
+
+                for (int p = n - 1, q = 0; q < n; p = q++)
+                {
+                    Vector2 pval = perimeter[p].To2D(normal);
+                    Vector2 qval = perimeter[q].To2D(normal);
+                    area += pval.x * qval.y - qval.x * pval.y;
+                }
+
+                return area * 0.5f;
             }
 
             public override string ToString()
@@ -1252,7 +1329,7 @@ namespace Simplex
                 // TODO: transform this by the matrix above
                 Vector3 normal = Normal;
 
-                Handles.DrawAAConvexPolygon(GetPerimeter().Select(p => p.Position + normal * 0.6f).ToArray());
+                Handles.DrawAAConvexPolygon(GetPerimeter().Select(p => p.LocalPosition/* + normal * 0.6f*/).ToArray());
 
                 //Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
@@ -1277,6 +1354,7 @@ namespace Simplex
             private HashSet<Face> m_faces = new HashSet<Face>();
 
             private int m_highestPointIndex = 0;
+            private int m_highestTriangleIndex = 0;
 
             public int PointCount
             {
@@ -1401,6 +1479,9 @@ namespace Simplex
 
             public void AddTriangle(Triangle triangle)
             {
+                if (triangle.ID == -1)
+                    triangle.SetID(m_highestTriangleIndex++);
+
                 m_triangles.Add(triangle);
             }
 
