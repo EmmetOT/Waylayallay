@@ -66,9 +66,9 @@ namespace Simplex
                 indexC = triangles[i + 2];
 
                 // create the three new candidate points
-                a = new Point(matrix.MultiplyPoint(vertices[indexA]), (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : normals[indexA], (indexA >= tangents.Length) ? default : tangents[indexA]);
-                b = new Point(matrix.MultiplyPoint(vertices[indexB]), (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : normals[indexB], (indexB >= tangents.Length) ? default : tangents[indexB]);
-                c = new Point(matrix.MultiplyPoint(vertices[indexC]), (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : normals[indexC], (indexC >= tangents.Length) ? default : tangents[indexC]);
+                a = new Point(matrix.MultiplyPoint(vertices[indexA]), (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : matrix.MultiplyVector(normals[indexA]), (indexA >= tangents.Length) ? default : tangents[indexA]);
+                b = new Point(matrix.MultiplyPoint(vertices[indexB]), (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : matrix.MultiplyVector(normals[indexB]), (indexB >= tangents.Length) ? default : tangents[indexB]);
+                c = new Point(matrix.MultiplyPoint(vertices[indexC]), (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : matrix.MultiplyVector(normals[indexC]), (indexC >= tangents.Length) ? default : tangents[indexC]);
 
                 // if we have no intention of abandoning those points if we find other points
                 // already in those points, we give them IDs now
@@ -661,7 +661,7 @@ namespace Simplex
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color col, float radius = 0.025f, bool label = true, Transform transform = null)
+            public void DrawGizmo(Color col, float radius = 0.025f, bool showNormals = false, bool label = true, Transform transform = null)
             {
                 Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
                 Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
@@ -684,6 +684,12 @@ namespace Simplex
                     handleStyle.fontSize = 10;
 
                     Handles.Label(LocalPosition + Normal * 0.15f + Vector3.up * 0.2f, UV.ToString(), handleStyle);
+                }
+
+                if (showNormals)
+                {
+                    Gizmos.color = Color.red;
+                    Gizmos.DrawLine(LocalPosition, LocalPosition + Normal * 0.2f);
                 }
 
                 Gizmos.matrix = originalGizmoMatrix;
@@ -1021,7 +1027,7 @@ namespace Simplex
             public void DrawGizmo(Color pointCol, Color edgeCol, Color normalCol, bool label = true, float normalScale = 0.1f, float radius = 0.025f, Transform transform = null)
             {
                 foreach (Point point in Points)
-                    point.DrawGizmo(pointCol, radius, label: false, transform: transform);
+                    point.DrawGizmo(pointCol, radius, showNormals: true, label: false, transform: transform);
 
                 foreach (Edge edge in Edges)
                     edge.DrawGizmo(edgeCol, radius: radius, label: false, transform: transform);
