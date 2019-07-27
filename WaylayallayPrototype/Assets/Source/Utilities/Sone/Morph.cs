@@ -21,20 +21,19 @@ namespace Simplex
 
         private bool m_collapseColocatedPoints = false;
 
-        public Morph(bool collapseColocatedPoints = false)
+        public Morph()
         {
-            SetCollapseColocatedPoints(collapseColocatedPoints);
             m_hashes = new Hashes();
             m_lookups = new Lookups(m_collapseColocatedPoints);
         }
 
-        public Morph(bool collapseColocatedPoints = false, params MeshFilter[] meshes) : this(collapseColocatedPoints)
+        public Morph(params MeshFilter[] meshes) : this()
         {
             for (int i = 0; i < meshes.Length; i++)
                 AddMesh(meshes[i]);
         }
 
-        public Morph(bool collapseColocatedPoints = false, params Mesh[] meshes) : this(collapseColocatedPoints)
+        public Morph(params Mesh[] meshes) : this()
         {
             for (int i = 0; i < meshes.Length; i++)
                 AddMesh(meshes[i]);
@@ -198,6 +197,39 @@ namespace Simplex
         public Point GetPoint(int pointIndex)
         {
             return m_hashes.GetPoint(pointIndex);
+        }
+
+        /// <summary>
+        /// Set the point with the given index to the given position, as well as all attached points.
+        /// </summary>
+        public void SetPoint(int pointIndex, Vector3 localPosition)
+        {
+            m_hashes.GetPoint(pointIndex).LocalPosition = localPosition;
+
+            Debug.Log("Moving " + pointIndex);
+
+            if (m_collapseColocatedPoints)
+                return;
+
+            HashSet<int> colocated = m_lookups.GetColocatedPoints(pointIndex);
+
+            if (colocated != null)
+            {
+                foreach (int id in colocated)
+                {
+                    Debug.Log("Also moving " + id);
+                    m_hashes.GetPoint(id).LocalPosition = localPosition;
+                }
+            }
+
+        }
+
+        /// <summary>
+        /// Set the given point to the given position, as well as all attached points.
+        /// </summary>
+        public void SetPoint(Point point, Vector3 localPosition)
+        {
+            SetPoint(point.ID, localPosition);
         }
 
         /// <summary>
@@ -512,8 +544,14 @@ namespace Simplex
 #if UNITY_EDITOR
         public void DrawGizmo(Transform transform = null)
         {
-            foreach (Triangle triangle in m_hashes.Triangles)
-                triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
+            foreach (Point point in m_hashes.Points)
+                point.DrawNormalGizmo(Color.red, transform);
+
+            foreach (Point point in m_hashes.Points)
+                point.DrawPointLabels(Color.black, transform);
+
+            //foreach (Triangle triangle in m_hashes.Triangles)
+            //    triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
 
             // orphans :(
             foreach (Edge edge in m_hashes.Edges)
@@ -661,7 +699,39 @@ namespace Simplex
             }
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color col, float radius = 0.025f, bool showNormals = false, bool label = true, Transform transform = null)
+
+            public void DrawNormalGizmo(Color col, Transform transform = null)
+            {
+                Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
+                Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
+
+                Gizmos.color = Color.red;
+                Gizmos.DrawLine(LocalPosition, LocalPosition + Normal * 0.2f);
+
+                Gizmos.matrix = originalGizmoMatrix;
+            }
+
+            public void DrawPointLabels(Color col, Transform transform = null)
+            {
+                Matrix4x4 originalHandleMatrix = Handles.matrix;
+                Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
+
+                GUIStyle handleStyle = new GUIStyle();
+                handleStyle.normal.textColor = Color.white;
+                handleStyle.fontSize = 30;
+
+                Handles.Label(LocalPosition + Normal * 0.15f, ID.ToString(), handleStyle);
+
+                //handleStyle = new GUIStyle();
+                //handleStyle.normal.textColor = Color.black;
+                //handleStyle.fontSize = 10;
+
+                //Handles.Label(LocalPosition + Normal * 0.15f + Vector3.up * 0.2f, UV.ToString(), handleStyle);
+
+                Handles.matrix = originalHandleMatrix;
+            }
+
+            public void DrawPointGizmo(Color col, float radius = 0.025f, Transform transform = null)
             {
                 Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
                 Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
@@ -670,28 +740,7 @@ namespace Simplex
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
                 Gizmos.DrawSphere(LocalPosition, radius);
-
-                if (label)
-                {
-                    GUIStyle handleStyle = new GUIStyle();
-                    handleStyle.normal.textColor = Color.white;
-                    handleStyle.fontSize = 30;
-
-                    Handles.Label(LocalPosition + Normal * 0.15f, ID.ToString(), handleStyle);
-
-                    handleStyle = new GUIStyle();
-                    handleStyle.normal.textColor = Color.black;
-                    handleStyle.fontSize = 10;
-
-                    Handles.Label(LocalPosition + Normal * 0.15f + Vector3.up * 0.2f, UV.ToString(), handleStyle);
-                }
-
-                if (showNormals)
-                {
-                    Gizmos.color = Color.red;
-                    Gizmos.DrawLine(LocalPosition, LocalPosition + Normal * 0.2f);
-                }
-
+                
                 Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
 #endif
@@ -822,8 +871,8 @@ namespace Simplex
                 Gizmos.color = edgeCol;
                 Gizmos.DrawLine(A.LocalPosition, B.LocalPosition);
 
-                A.DrawGizmo(pointCol, radius, label, transform);
-                B.DrawGizmo(pointCol, radius, label, transform);
+                A.DrawPointGizmo(pointCol, radius, transform);
+                B.DrawPointGizmo(pointCol, radius, transform);
 
                 Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
@@ -1026,9 +1075,6 @@ namespace Simplex
 #if UNITY_EDITOR
             public void DrawGizmo(Color pointCol, Color edgeCol, Color normalCol, bool label = true, float normalScale = 0.1f, float radius = 0.025f, Transform transform = null)
             {
-                foreach (Point point in Points)
-                    point.DrawGizmo(pointCol, radius, showNormals: true, label: false, transform: transform);
-
                 foreach (Edge edge in Edges)
                     edge.DrawGizmo(edgeCol, radius: radius, label: false, transform: transform);
 
@@ -1526,6 +1572,7 @@ namespace Simplex
             private Dictionary<int, HashSet<Point>> m_pointsByLocation = new Dictionary<int, HashSet<Point>>();
 
             private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
+            private Dictionary<int, HashSet<int>> m_samePoints = new Dictionary<int, HashSet<int>>();
 
             private Dictionary<int, HashSet<Edge>> m_edges = new Dictionary<int, HashSet<Edge>>();
 
@@ -1555,12 +1602,12 @@ namespace Simplex
                 m_edges[edge.B.ID].Add(edge);
             }
 
-            public void AddConnection(Point a, Point b)
+            public void AddConnection(Point a, Point b, bool isSamePoint = false)
             {
-                AddConnection(a.ID, b.ID);
+                AddConnection(a.ID, b.ID, isSamePoint);
             }
 
-            public void AddConnection(int a, int b)
+            public void AddConnection(int a, int b, bool isSamePoint = false)
             {
                 if (!m_connectedPoints.ContainsKey(a))
                     m_connectedPoints.Add(a, new HashSet<int>());
@@ -1571,6 +1618,26 @@ namespace Simplex
                     m_connectedPoints.Add(b, new HashSet<int>());
 
                 m_connectedPoints[b].Add(a);
+                
+                if (isSamePoint)
+                {
+                    if (!m_samePoints.ContainsKey(a))
+                        m_samePoints.Add(a, new HashSet<int>());
+
+                    m_samePoints[a].Add(b);
+
+                    if (!m_samePoints.ContainsKey(b))
+                        m_samePoints.Add(b, new HashSet<int>());
+
+                    m_samePoints[b].Add(a);
+                    
+                    // unlike connectedness, sameness is totally transitive. if A = B and A = C then A = C
+                    foreach (int sameAsA in m_samePoints[a])
+                        m_samePoints[b].Add(sameAsA);
+
+                    foreach (int sameAsB in m_samePoints[b])
+                        m_samePoints[a].Add(sameAsB);
+                }
             }
 
             public IEnumerable<int> ConnectedPoints(int id)
@@ -1589,7 +1656,15 @@ namespace Simplex
 
                 return m_connectedPoints[id];
             }
+            
+            public HashSet<int> GetColocatedPoints(int id)
+            {
+                if (!m_samePoints.ContainsKey(id))
+                    return null;
 
+                return m_samePoints[id];
+            }
+            
             public IEnumerable<Edge> GetEdgesContaining(int id)
             {
                 if (!m_edges.ContainsKey(id))
@@ -1703,7 +1778,9 @@ namespace Simplex
                         // the two points which occupy the same space. This will allow us to treat them as the same point
                         // for pathing
 
-                        AddConnection(point, existing);
+                        Debug.Log(point.ID + " and " + existing.ID + " are the same point.");
+
+                        AddConnection(point, existing, isSamePoint: true);
                     }
 
                 }

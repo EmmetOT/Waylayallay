@@ -33,39 +33,24 @@ public class MorphTest : MonoBehaviour
 
     public void SetPoint(int i, Vector3 vec)
     {
-        m_morph.GetPoint(i).LocalPosition = vec;
+        m_morph.SetPoint(i, vec);
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
+
+        m_resultMeshFilter.sharedMesh.RecalculateNormals();
     }
     
     [SerializeField]
     private Morph m_morph;
     public Morph Morph { get { return m_morph; } }
-
-
-    [SerializeField]
-    [OnValueChanged("Reinit")]
-    private bool m_collapseColocatedPoints = false;
-
-    [SerializeField]
-    private bool m_moving = false;
-
-    [SerializeField]
-    private float m_moveSpeed = 100f;
-
-    [SerializeField]
-    private int m_movingPoint = 0;
-
+    
     private bool m_initialized = false;
 
     [SerializeField]
+    private bool m_drawOriginalMeshGizmos = false;
+
+    [SerializeField]
     private bool m_drawGizmos = false;
-
-    [SerializeField]
-    private Vector3 m_testVecA;
-
-    [SerializeField]
-    private Vector3 m_testVecB;
-
+    
     [SerializeField]
     private int m_connectedQueryOne;
 
@@ -77,18 +62,7 @@ public class MorphTest : MonoBehaviour
 
     [SerializeField]
     private MeshFilter m_resultMeshFilter;
-
-    [Button]
-    private void TestUnityVector2SignedAngle()
-    {
-        Debug.Log("(0, -1) and (-1, 0) gives " + Vector2.SignedAngle(new Vector2(0f, -1f), new Vector2(-1f, 0f)).ToString());
-        Debug.Log("(-1, 0) and (0, 1) gives " + Vector2.SignedAngle(new Vector2(-1f, 0f), new Vector2(0f, 1f)).ToString());
-        Debug.Log("(-2, 0) and (0, 2) gives " + Vector2.SignedAngle(new Vector2(-2f, 0f), new Vector2(0f, 2f)).ToString());
-        Debug.Log("(-2, 0) and (0, 1) gives " + Vector2.SignedAngle(new Vector2(-2f, 0f), new Vector2(0f, 1f)).ToString());
-        Debug.Log("(-2, 0) and (0, 0.5) gives " + Vector2.SignedAngle(new Vector2(-2f, 0f), new Vector2(0f, 0.5f)).ToString());
-        Debug.Log("(0, -1) and (0, 1) gives " + Vector2.SignedAngle(new Vector2(0f, -1f), new Vector2(0f, 1f)).ToString());
-    }
-
+    
     private void Awake()
     {
         Reinit();
@@ -97,7 +71,7 @@ public class MorphTest : MonoBehaviour
     public void Reinit()
     {
         Material[] mats = m_testMeshes[0].GetComponent<Renderer>().sharedMaterials;
-        m_morph = new Morph(m_collapseColocatedPoints, m_testMeshes);
+        m_morph = new Morph(m_testMeshes);
 
         for (int i = 0; i < m_testMeshes.Length; i++)
             m_testMeshes[i].gameObject.SetActive(false);
@@ -112,32 +86,7 @@ public class MorphTest : MonoBehaviour
     {
         Reinit();
     }
-
-    [Button]
-    private void CreateMesh()
-    {
-        if (m_morph == null)
-            m_morph = new Morph();
-
-        m_morph.AddEdge(m_testVecA, m_testVecB);
-    }
-
-    [Button]
-    private void CreateForwardMesh()
-    {
-        m_morph = new Morph();
-
-        m_morph.AddTriangle(new Vector3(0f, 1f, 0f), new Vector3(1f, 0f, 0f), new Vector3(-1f, 0f, 0f));
-    }
-
-    [Button]
-    private void CreateBackwardMesh()
-    {
-        m_morph = new Morph();
-
-        m_morph.AddTriangle(new Vector3(0f, 1f, 0f), new Vector3(-1f, 0f, 0f), new Vector3(1f, 0f, 0f));
-    }
-
+    
     [Button]
     private void CheckIfConnected()
     {
@@ -159,31 +108,7 @@ public class MorphTest : MonoBehaviour
         m_morph.FlipNormals();
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
     }
-
-    [Button]
-    private void MovePointA()
-    {
-        if (m_morph == null)
-            return;
-
-        m_morph.GetPoint(0).LocalPosition += Vector3.right * 0.1f;
-    }
-
-    private void Update()
-    {
-        if (Input.GetKeyUp(KeyCode.Q))
-            CreateMorphFromMesh();
-
-        if (m_moving)
-        {
-            m_movingPoint = m_movingPoint % m_morph.PointCount;
-
-            m_morph.GetPoint(m_movingPoint).LocalPosition += Vector3.right * Time.deltaTime * m_moveSpeed;
-
-            m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
-        }
-    }
-
+    
     private List<Morph.Point> m_perimeter = null;
 
     private List<Morph.Point> GetPerimeter()
@@ -209,6 +134,32 @@ public class MorphTest : MonoBehaviour
             return face;
 
         return null;
+    }
+
+    private void OnDrawGizmos()
+    {
+        if (!m_drawOriginalMeshGizmos)
+            return;
+
+        //for (int i = 0; i < m_testMeshes.Length; i++)
+        //{
+        //    Vector3[] vertices = m_testMeshes[i].sharedMesh.vertices;
+        //    Vector3[] normals = m_testMeshes[i].sharedMesh.normals;
+
+        //    Matrix4x4 matrix = m_testMeshes[i].transform.localToWorldMatrix;
+
+        //    for (int j = 0; j < vertices.Length; j++)
+        //    {
+        //        Gizmos.color = Color.blue;
+
+        //        Gizmos.DrawSphere(matrix * vertices[j], 0.1f);
+        //        Gizmos.DrawLine(matrix * vertices[j], matrix * (vertices[j] + normals[j] * 0.3f));
+
+        //        Gizmos.color = Color.red;
+
+        //        Gizmos.DrawSphere(vertices[j], 0.1f);
+        //    }
+        //}
     }
 
     //private void OnDrawGizmos()
@@ -318,7 +269,7 @@ public class MorphTest : MonoBehaviour
     //            continue;
 
     //        float angle = Vector2.SignedAngle(referenceDirection, ((normalizingRotation * points[i].LocalPosition) - (normalizingRotation * current.LocalPosition)).normalized);
-            
+
     //        if (angle > bestAngle)
     //        {
     //            bestAngle = angle;
@@ -336,7 +287,7 @@ public class MorphTest : MonoBehaviour
     //            }
     //        }
     //    }
-        
+
     //    referenceDirection = ((normalizingRotation * current.LocalPosition) - (normalizingRotation * bestPoint.LocalPosition)).normalized;
     //    current = bestPoint;
 
