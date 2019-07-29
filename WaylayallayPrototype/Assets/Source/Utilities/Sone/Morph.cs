@@ -177,7 +177,6 @@ namespace Simplex
                 foreach (int id in colocated)
                     m_data.GetPoint(id).LocalPosition = localPosition;
             }
-
         }
 
         /// <summary>
@@ -229,9 +228,9 @@ namespace Simplex
             if (a == b)
                 return true;
 
-            if (m_data.GetConnectedPoints(a).Contains(b))
+            if (m_data.IsDirectlyConnected(a, b))
                 return true;
-
+            
             return false;
         }
 
@@ -258,7 +257,7 @@ namespace Simplex
             if (a == b)
                 return true;
 
-            if (m_data.GetConnectedPoints(a).Contains(b))
+            if (m_data.GetDirectlyConnectedPoints(a).Contains(b))
                 return true;
 
             Queue<int> queue = new Queue<int>();
@@ -313,9 +312,9 @@ namespace Simplex
                 // 2) get all the points connected to B
                 // 3) compare - if any overlap points P, A-B-P forms a triangle
 
-                HashSet<int> pointsFromB = m_data.GetConnectedPoints(edge.B.ID);
+                HashSet<int> pointsFromB = m_data.GetDirectlyConnectedPoints(edge.B.ID);
 
-                foreach (int pointFromA in m_data.GetConnectedPoints(edge.A.ID))
+                foreach (int pointFromA in m_data.GetDirectlyConnectedPoints(edge.A.ID))
                 {
                     if (pointsFromB.Contains(pointFromA))
                     {
@@ -1220,7 +1219,7 @@ namespace Simplex
                     for (int i = 0; i < points.Count; i++)
                     {
                         // don't ever look back!
-                        if (points[i] == current)// || !m_data.GetConnectedPoints(current.ID).Contains(points[i].ID))
+                        if (points[i] == current || !m_data.IsDirectlyConnected(current.ID, points[i].ID))
                             continue;
 
                         //if (!m_data.GetConnectedPoints(current.ID).Contains(points[i].ID))
@@ -1383,7 +1382,7 @@ namespace Simplex
 
             public void AddConnection(int a, int b, bool isSamePoint = false)
             {
-                bool debug = (a == 5 || b == 5 || a == 11 || b == 11);
+                bool debug = (a == 7 || b == 7 || a == 1 || b == 1);
 
                 if (debug)
                     Debug.Log("Intentionally connecting " + a + " to " + b);
@@ -1398,53 +1397,53 @@ namespace Simplex
 
                 m_connectedPoints[b].Add(a);
 
-                if (m_samePoints.ContainsKey(a))
-                {
-                    if (debug)
-                        Debug.Log("The points which are the same as " + a + " are as follows:");
+                //if (m_connectedPoints.ContainsKey(a))
+                //{
+                //    if (debug)
+                //        Debug.Log("The points which are connected to " + a + " are as follows:");
 
-                    foreach (int sameAsA in m_samePoints[a])
-                    {
-                        if (sameAsA == b || sameAsA == a)
-                            continue;
+                //    foreach (int connectedToA in m_connectedPoints[a])
+                //    {
+                //        if (m_samePoints.ContainsKey(a) && !m_samePoints[a].Contains(connectedToA))
+                //            continue;
 
-                        if (debug)
-                            Debug.Log(sameAsA);
+                //        if (debug)
+                //            Debug.Log(connectedToA);
 
-                        if (!m_connectedPoints.ContainsKey(sameAsA))
-                            m_connectedPoints.Add(sameAsA, new HashSet<int>());
+                //        if (!m_connectedPoints.ContainsKey(connectedToA))
+                //            m_connectedPoints.Add(connectedToA, new HashSet<int>());
 
-                        m_connectedPoints[sameAsA].Add(b);
-                        m_connectedPoints[b].Add(sameAsA);
+                //        m_connectedPoints[connectedToA].Add(b);
+                //        m_connectedPoints[b].Add(connectedToA);
 
-                        if (debug)
-                            Debug.Log("Also connecting " + sameAsA + " and " + b);
-                    }
-                }
+                //        if (debug)
+                //            Debug.Log("Also connecting " + connectedToA + " and " + b);
+                //    }
+                //}
 
-                if (m_samePoints.ContainsKey(b))
-                {
-                    if (debug)
-                        Debug.Log("The points which are the same as " + b + " are as follows:");
+                //if (m_connectedPoints.ContainsKey(b))
+                //{
+                //    if (debug)
+                //        Debug.Log("The points which are connected to " + b + " are as follows:");
 
-                    foreach (int sameAsB in m_samePoints[b])
-                    {
-                        if (sameAsB == a || sameAsB == b)
-                            continue;
+                //    foreach (int connectedToB in m_connectedPoints[b])
+                //    {
+                //        if (m_samePoints.ContainsKey(b) && !m_samePoints[b].Contains(connectedToB))
+                //            continue;
 
-                        if (debug)
-                            Debug.Log(sameAsB);
+                //        if (debug)
+                //            Debug.Log(connectedToB);
 
-                        if (!m_connectedPoints.ContainsKey(sameAsB))
-                            m_connectedPoints.Add(sameAsB, new HashSet<int>());
+                //        if (!m_connectedPoints.ContainsKey(connectedToB))
+                //            m_connectedPoints.Add(connectedToB, new HashSet<int>());
 
-                        m_connectedPoints[sameAsB].Add(a);
-                        m_connectedPoints[a].Add(sameAsB);
+                //        m_connectedPoints[connectedToB].Add(a);
+                //        m_connectedPoints[a].Add(connectedToB);
 
-                        if (debug)
-                            Debug.Log("Also connecting " + sameAsB + " and " + a);
-                    }
-                }
+                //        if (debug)
+                //            Debug.Log("Also connecting " + connectedToB + " and " + a);
+                //    }
+                //}
                 
                 if (isSamePoint)
                 {
@@ -1476,7 +1475,29 @@ namespace Simplex
                     yield return connected;
             }
 
-            public HashSet<int> GetConnectedPoints(int id)
+            public bool IsDirectlyConnected(int a, int b)
+            {
+                if ((m_connectedPoints.ContainsKey(a) && m_connectedPoints[a].Contains(b)) || (m_connectedPoints.ContainsKey(b) && m_connectedPoints[b].Contains(a)))
+                    return true;
+
+                if (m_samePoints.ContainsKey(a))
+                {
+                    foreach (int samePointAsA in m_samePoints[a])
+                        if ((m_connectedPoints.ContainsKey(samePointAsA) && m_connectedPoints[samePointAsA].Contains(b)) || (m_connectedPoints.ContainsKey(b) && m_connectedPoints[b].Contains(samePointAsA)))
+                            return true;
+                }
+
+                if (m_samePoints.ContainsKey(b))
+                {
+                    foreach (int samePointAsB in m_samePoints[b])
+                        if ((m_connectedPoints.ContainsKey(samePointAsB) && m_connectedPoints[samePointAsB].Contains(a)) || (m_connectedPoints.ContainsKey(a) && m_connectedPoints[a].Contains(samePointAsB)))
+                            return true;
+                }
+
+                return false;
+            }
+
+            public HashSet<int> GetDirectlyConnectedPoints(int id)
             {
                 if (!m_connectedPoints.ContainsKey(id))
                     return null;
@@ -1592,8 +1613,7 @@ namespace Simplex
             {
                 return m_edges.Contains(edge);
             }
-
-
+            
             public void AddTriangle(Triangle triangle)
             {
                 if (triangle.ID == -1)

@@ -71,9 +71,14 @@ public class MorphTest : MonoBehaviour
         
         List<Morph.Point> perimeter = GetPerimeter();
 
-        foreach (Morph.Point point in m_morph.Points)
-            foreach (Morph.Point connected in m_morph.GetConnectedPoints(point))
-                Debug.Log(point.ID + " - " + connected.ID);
+        foreach (Morph.Point a in m_morph.Points)
+            foreach (Morph.Point b in m_morph.Points)
+                if (m_morph.IsDirectlyConnected(a, b))
+                    Debug.Log(a.ID + " - " + b.ID);
+
+        Debug.Log("===========");
+        foreach (Morph.Point point in perimeter)
+            Debug.Log(point.ID);
     }
 
     public void Reinit()
