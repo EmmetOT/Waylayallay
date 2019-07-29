@@ -9,10 +9,10 @@ public class PointHandle : Editor
     protected virtual void OnSceneGUI()
     {
         MorphTest morphTest = (MorphTest)target;
-        
+
         if (morphTest.PointCount == 0)
             return;
-        
+
         Handles.color = Color.black;
         Matrix4x4 originalHandlesMatrix = Handles.matrix;
         Handles.matrix = morphTest.transform.localToWorldMatrix;

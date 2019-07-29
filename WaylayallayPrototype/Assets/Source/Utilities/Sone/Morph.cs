@@ -19,21 +19,13 @@ namespace Simplex
         private Hashes m_hashes;
         private Lookups m_lookups;
 
-        private bool m_collapseColocatedPoints = false;
-
         public Morph()
         {
             m_hashes = new Hashes();
-            m_lookups = new Lookups(m_collapseColocatedPoints);
+            m_lookups = new Lookups();
         }
 
         public Morph(params MeshFilter[] meshes) : this()
-        {
-            for (int i = 0; i < meshes.Length; i++)
-                AddMesh(meshes[i]);
-        }
-
-        public Morph(params Mesh[] meshes) : this()
         {
             for (int i = 0; i < meshes.Length; i++)
                 AddMesh(meshes[i]);
@@ -65,44 +57,18 @@ namespace Simplex
                 indexC = triangles[i + 2];
 
                 // create the three new candidate points
-                a = new Point(matrix.MultiplyPoint(vertices[indexA]), (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : matrix.MultiplyVector(normals[indexA]), (indexA >= tangents.Length) ? default : tangents[indexA]);
-                b = new Point(matrix.MultiplyPoint(vertices[indexB]), (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : matrix.MultiplyVector(normals[indexB]), (indexB >= tangents.Length) ? default : tangents[indexB]);
-                c = new Point(matrix.MultiplyPoint(vertices[indexC]), (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : matrix.MultiplyVector(normals[indexC]), (indexC >= tangents.Length) ? default : tangents[indexC]);
+                a = new Point(matrix.MultiplyPoint(vertices[indexA]), (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : matrix.MultiplyVector(normals[indexA]), (indexA >= tangents.Length) ? default : matrix.MultiplyVector(tangents[indexA]));
+                b = new Point(matrix.MultiplyPoint(vertices[indexB]), (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : matrix.MultiplyVector(normals[indexB]), (indexB >= tangents.Length) ? default : matrix.MultiplyVector(tangents[indexB]));
+                c = new Point(matrix.MultiplyPoint(vertices[indexC]), (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : matrix.MultiplyVector(normals[indexC]), (indexC >= tangents.Length) ? default : matrix.MultiplyVector(tangents[indexC]));
+                
+                m_hashes.AddPoint(a);
+                m_hashes.AddPoint(b);
+                m_hashes.AddPoint(c);
 
-                // if we have no intention of abandoning those points if we find other points
-                // already in those points, we give them IDs now
-                if (!m_collapseColocatedPoints)
-                {
-                    if (a.ID == -1)
-                        m_hashes.AddPoint(a);
-
-                    if (b.ID == -1)
-                        m_hashes.AddPoint(b);
-
-                    if (c.ID == -1)
-                        m_hashes.AddPoint(c);
-                }
-
-                // this method will try to find points occupying the same position as the given point.
-                // if we're collapsing points, then it will return the original point. else it will add the new
-                // points as 'connected' for the sake of graph searches
-                a = m_lookups.GetExistingPointInSameLocation(a);
-                b = m_lookups.GetExistingPointInSameLocation(b);
-                c = m_lookups.GetExistingPointInSameLocation(c);
-
-                // now if we still have new points
-                // we can assign them IDs
-                if (m_collapseColocatedPoints)
-                {
-                    if (a.ID == -1)
-                        m_hashes.AddPoint(a);
-
-                    if (b.ID == -1)
-                        m_hashes.AddPoint(b);
-
-                    if (c.ID == -1)
-                        m_hashes.AddPoint(c);
-                }
+                // make a note of any points which share a vertex (for pathing)
+                m_lookups.ConnectPointsInSameLocation(a);
+                m_lookups.ConnectPointsInSameLocation(b);
+                m_lookups.ConnectPointsInSameLocation(c);
 
                 AddTriangle(a, b, c);
             }
@@ -143,7 +109,7 @@ namespace Simplex
                 {
                     for (int k = 0; k < points.Length; k++)
                     {
-                        if (points[k] == triangle[j])
+                        if (points[k].Equals(triangle[j]))
                         {
                             triangles[i++] = k;
                             break;
@@ -167,10 +133,10 @@ namespace Simplex
         /// this will likely result in weird shading because there'll only be one normal per vertex. However, the mesh will also be more compact,
         /// and this effect is not noticable for smooth meshes such as spheres.
         /// </summary>
-        public void SetCollapseColocatedPoints(bool collapseColocatedPoints)
-        {
-            m_collapseColocatedPoints = collapseColocatedPoints;
-        }
+        //public void SetCollapseColocatedPoints(bool collapseColocatedPoints)
+        //{
+        //    m_collapseColocatedPoints = collapseColocatedPoints;
+        //}
 
         #region Points
 
@@ -205,21 +171,13 @@ namespace Simplex
         public void SetPoint(int pointIndex, Vector3 localPosition)
         {
             m_hashes.GetPoint(pointIndex).LocalPosition = localPosition;
-
-            Debug.Log("Moving " + pointIndex);
-
-            if (m_collapseColocatedPoints)
-                return;
-
+            
             HashSet<int> colocated = m_lookups.GetColocatedPoints(pointIndex);
 
             if (colocated != null)
             {
                 foreach (int id in colocated)
-                {
-                    Debug.Log("Also moving " + id);
                     m_hashes.GetPoint(id).LocalPosition = localPosition;
-                }
             }
 
         }
@@ -355,45 +313,6 @@ namespace Simplex
             Assert.AreNotEqual(a.LocalPosition, b.LocalPosition);
 
             Edge edge = new Edge(a, b);
-            AddEdge(edge, findNewTriangles);
-
-            return edge;
-        }
-
-        /// <summary>
-        /// Add a new edge connecting point A to point B.
-        /// </summary>
-        public Edge AddEdge(Vector3 a, Vector3 b, bool findNewTriangles = true)
-        {
-            Assert.AreNotEqual(a, b);
-
-            Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
-            AddEdge(edge, findNewTriangles);
-
-            return edge;
-        }
-
-        /// <summary>
-        /// Add a new edge connecting point A to point B.
-        /// </summary>
-        public Edge AddEdge(Point a, Vector3 b, bool findNewTriangles = true)
-        {
-            Assert.AreNotEqual(a.LocalPosition, b);
-
-            Edge edge = new Edge(a, m_lookups.GetExistingPointInSameLocation(b.ToPoint()));
-            AddEdge(edge, findNewTriangles);
-
-            return edge;
-        }
-
-        /// <summary>
-        /// Add a new edge connecting point A to point B.
-        /// </summary>
-        public Edge AddEdge(Vector3 a, Point b, bool findNewTriangles = true)
-        {
-            Assert.AreNotEqual(a, b.LocalPosition);
-
-            Edge edge = new Edge(m_lookups.GetExistingPointInSameLocation(a.ToPoint()), b);
             AddEdge(edge, findNewTriangles);
 
             return edge;
@@ -553,10 +472,10 @@ namespace Simplex
             //foreach (Triangle triangle in m_hashes.Triangles)
             //    triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
 
-            // orphans :(
-            foreach (Edge edge in m_hashes.Edges)
-                if (!m_lookups.IsEdgeInTriangle(edge))
-                    edge.DrawGizmo(Color.red, transform: transform);
+            //// orphans :(
+            //foreach (Edge edge in m_hashes.Edges)
+            //    if (!m_lookups.IsEdgeInTriangle(edge))
+            //        edge.DrawGizmo(Color.red, transform: transform);
         }
 
         public void DrawFaces(Transform transform = null)
@@ -705,8 +624,8 @@ namespace Simplex
                 Matrix4x4 originalGizmoMatrix = Gizmos.matrix;
                 Gizmos.matrix = transform == null ? originalGizmoMatrix : transform.localToWorldMatrix;
 
-                Gizmos.color = Color.red;
-                Gizmos.DrawLine(LocalPosition, LocalPosition + Normal * 0.2f);
+                Gizmos.color = col;
+                Gizmos.DrawLine(LocalPosition, LocalPosition + Normal * 0.6f);
 
                 Gizmos.matrix = originalGizmoMatrix;
             }
@@ -717,16 +636,10 @@ namespace Simplex
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
                 GUIStyle handleStyle = new GUIStyle();
-                handleStyle.normal.textColor = Color.white;
-                handleStyle.fontSize = 30;
+                handleStyle.normal.textColor = Color.red;
+                handleStyle.fontSize = 10;
 
-                Handles.Label(LocalPosition + Normal * 0.15f, ID.ToString(), handleStyle);
-
-                //handleStyle = new GUIStyle();
-                //handleStyle.normal.textColor = Color.black;
-                //handleStyle.fontSize = 10;
-
-                //Handles.Label(LocalPosition + Normal * 0.15f + Vector3.up * 0.2f, UV.ToString(), handleStyle);
+                Handles.Label(LocalPosition + Vector3.up * 0.15f, UV.ToString(), handleStyle);
 
                 Handles.matrix = originalHandleMatrix;
             }
@@ -740,7 +653,7 @@ namespace Simplex
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
                 Gizmos.DrawSphere(LocalPosition, radius);
-                
+
                 Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
 #endif
@@ -1326,7 +1239,7 @@ namespace Simplex
                 int triangleCount = m_triangles.Count;
                 int n = perimeter.Count;
 
-               
+
                 throw new System.NotImplementedException();
             }
 
@@ -1580,13 +1493,6 @@ namespace Simplex
 
             private Dictionary<int, HashSet<Face>> m_faces = new Dictionary<int, HashSet<Face>>();
 
-            private bool m_collapseCollocatedPoints;
-
-            public Lookups(bool collapseColocatedPoints)
-            {
-                m_collapseCollocatedPoints = collapseColocatedPoints;
-            }
-
             public void AddEdge(Edge edge)
             {
                 AddConnection(edge.A, edge.B);
@@ -1618,7 +1524,7 @@ namespace Simplex
                     m_connectedPoints.Add(b, new HashSet<int>());
 
                 m_connectedPoints[b].Add(a);
-                
+
                 if (isSamePoint)
                 {
                     if (!m_samePoints.ContainsKey(a))
@@ -1630,7 +1536,7 @@ namespace Simplex
                         m_samePoints.Add(b, new HashSet<int>());
 
                     m_samePoints[b].Add(a);
-                    
+
                     // unlike connectedness, sameness is totally transitive. if A = B and A = C then A = C
                     foreach (int sameAsA in m_samePoints[a])
                         m_samePoints[b].Add(sameAsA);
@@ -1656,7 +1562,7 @@ namespace Simplex
 
                 return m_connectedPoints[id];
             }
-            
+
             public HashSet<int> GetColocatedPoints(int id)
             {
                 if (!m_samePoints.ContainsKey(id))
@@ -1664,7 +1570,7 @@ namespace Simplex
 
                 return m_samePoints[id];
             }
-            
+
             public IEnumerable<Edge> GetEdgesContaining(int id)
             {
                 if (!m_edges.ContainsKey(id))
@@ -1756,37 +1662,19 @@ namespace Simplex
             /// If the given point has data such as UV, Tangent, or Normal, you can optionally make the returned point
             /// (if it already existed after all) copy this data onto itself. This defaults to true.
             /// </summary>
-            public Point GetExistingPointInSameLocation(Point point, bool copyDataFromGivenPoint = true)
+            public void ConnectPointsInSameLocation(Point point)
             {
                 int locationID = point.GetLocationID();
 
                 // points already exist at given location. return one arbitrarily.
                 if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
                 {
-                    Point existing = m_pointsByLocation[locationID].First();
-
-                    if (m_collapseCollocatedPoints)
+                    foreach (Point existing in m_pointsByLocation[locationID])
                     {
-                        if (copyDataFromGivenPoint && point.HasDataOtherThanPosition)
-                            existing.CopyNonPositionData(point);
-
-                        return existing;
-                    }
-                    else
-                    {
-                        // if we're not collapsing points, just make a note of the connection between
-                        // the two points which occupy the same space. This will allow us to treat them as the same point
-                        // for pathing
-
-                        Debug.Log(point.ID + " and " + existing.ID + " are the same point.");
-
+                        AddConnection(existing, point, isSamePoint: true);
                         AddConnection(point, existing, isSamePoint: true);
                     }
-
                 }
-
-                // point is at a new location so it's ok to use
-                return point;
             }
 
             /// <summary>

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Simplex;
 using NaughtyAttributes;
+using UnityEditor;
 
 public class MorphTest : MonoBehaviour
 {
@@ -38,11 +39,11 @@ public class MorphTest : MonoBehaviour
 
         m_resultMeshFilter.sharedMesh.RecalculateNormals();
     }
-    
+
     [SerializeField]
     private Morph m_morph;
     public Morph Morph { get { return m_morph; } }
-    
+
     private bool m_initialized = false;
 
     [SerializeField]
@@ -50,7 +51,7 @@ public class MorphTest : MonoBehaviour
 
     [SerializeField]
     private bool m_drawGizmos = false;
-    
+
     [SerializeField]
     private int m_connectedQueryOne;
 
@@ -62,7 +63,7 @@ public class MorphTest : MonoBehaviour
 
     [SerializeField]
     private MeshFilter m_resultMeshFilter;
-    
+
     private void Awake()
     {
         Reinit();
@@ -71,12 +72,16 @@ public class MorphTest : MonoBehaviour
     public void Reinit()
     {
         Material[] mats = m_testMeshes[0].GetComponent<Renderer>().sharedMaterials;
+        
         m_morph = new Morph(m_testMeshes);
 
-        for (int i = 0; i < m_testMeshes.Length; i++)
-            m_testMeshes[i].gameObject.SetActive(false);
-
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
+
+        for (int i = 0; i < m_testMeshes.Length; i++)
+        {
+            m_testMeshes[i].gameObject.SetActive(false);
+        }
+
         m_resultMeshFilter.gameObject.SetActive(true);
         m_resultMeshFilter.GetComponent<Renderer>().sharedMaterials = mats;
     }
@@ -86,7 +91,7 @@ public class MorphTest : MonoBehaviour
     {
         Reinit();
     }
-    
+
     [Button]
     private void CheckIfConnected()
     {
@@ -108,7 +113,7 @@ public class MorphTest : MonoBehaviour
         m_morph.FlipNormals();
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
     }
-    
+
     private List<Morph.Point> m_perimeter = null;
 
     private List<Morph.Point> GetPerimeter()
@@ -136,31 +141,37 @@ public class MorphTest : MonoBehaviour
         return null;
     }
 
-    private void OnDrawGizmos()
-    {
-        if (!m_drawOriginalMeshGizmos)
-            return;
+    //private void OnDrawGizmos()
+    //{
+    //    if (!m_drawOriginalMeshGizmos)
+    //        return;
 
-        //for (int i = 0; i < m_testMeshes.Length; i++)
-        //{
-        //    Vector3[] vertices = m_testMeshes[i].sharedMesh.vertices;
-        //    Vector3[] normals = m_testMeshes[i].sharedMesh.normals;
+    //    for (int i = 0; i < m_testMeshes.Length; i++)
+    //    {
+    //        if (m_testMeshes[i] == null)
+    //            continue;
 
-        //    Matrix4x4 matrix = m_testMeshes[i].transform.localToWorldMatrix;
+    //        MeshFilter m = m_testMeshes[i];
+    //        Vector3[] vertices = m.sharedMesh.vertices;
+    //        Vector3[] normals = m.sharedMesh.normals;
+    //        Vector2[] uvs = m.sharedMesh.uv;
 
-        //    for (int j = 0; j < vertices.Length; j++)
-        //    {
-        //        Gizmos.color = Color.blue;
+    //        for (int j = 0; j < vertices.Length; j++)
+    //        {
+    //            Gizmos.color = Color.green;
 
-        //        Gizmos.DrawSphere(matrix * vertices[j], 0.1f);
-        //        Gizmos.DrawLine(matrix * vertices[j], matrix * (vertices[j] + normals[j] * 0.3f));
+    //            Vector3 offset = Vector3.one * 0.05f;
 
-        //        Gizmos.color = Color.red;
+    //            Gizmos.DrawLine(offset + m.transform.localToWorldMatrix.MultiplyPoint(vertices[j]), offset + m.transform.localToWorldMatrix.MultiplyPoint(vertices[j]) + m.transform.localToWorldMatrix.MultiplyVector(normals[j]) * 0.6f);
 
-        //        Gizmos.DrawSphere(vertices[j], 0.1f);
-        //    }
-        //}
-    }
+    //            GUIStyle handleStyle = new GUIStyle();
+    //            handleStyle.normal.textColor = Color.green;
+    //            handleStyle.fontSize = 10;
+
+    //            Handles.Label(m.transform.localToWorldMatrix.MultiplyPoint(vertices[j]), uvs[j].ToString(), handleStyle);
+    //        }
+    //    }
+    //}
 
     //private void OnDrawGizmos()
     //{
