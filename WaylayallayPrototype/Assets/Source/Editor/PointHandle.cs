@@ -35,7 +35,7 @@ public class PointHandle : Editor
     [DrawGizmo(GizmoType.Selected | GizmoType.Active)]
     private static void DrawGizmos(MorphTest morphTest, GizmoType gizmoType)
     {
-        if (morphTest.PointCount == 0)
+        if (morphTest.PointCount == 0 || !morphTest.DrawGizmos)
             return;
 
         morphTest.Morph.DrawGizmo(morphTest.transform);

@@ -627,7 +627,7 @@ namespace Simplex
             }
         }
 
-        public void DrawGizmos(Vector3 offset = default(Vector3), float magnitude = 1f)
+        public void DrawGizmos(Vector3 offset = default, float magnitude = 1f)
         {
 #if UNITY_EDITOR
 

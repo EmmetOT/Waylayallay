@@ -51,6 +51,7 @@ public class MorphTest : MonoBehaviour
 
     [SerializeField]
     private bool m_drawGizmos = false;
+    public bool DrawGizmos { get { return m_drawGizmos; } }
 
     [SerializeField]
     private int m_connectedQueryOne;
@@ -67,6 +68,12 @@ public class MorphTest : MonoBehaviour
     private void Awake()
     {
         Reinit();
+        
+        List<Morph.Point> perimeter = GetPerimeter();
+
+        foreach (Morph.Point point in m_morph.Points)
+            foreach (Morph.Point connected in m_morph.GetConnectedPoints(point))
+                Debug.Log(point.ID + " - " + connected.ID);
     }
 
     public void Reinit()
@@ -98,7 +105,7 @@ public class MorphTest : MonoBehaviour
         if (m_connectedQueryOne > m_morph.PointCount || m_connectedQueryTwo > m_morph.PointCount)
             return;
 
-        if (m_morph.IsConnected(m_connectedQueryOne, m_connectedQueryTwo))
+        if (m_morph.HasPath(m_connectedQueryOne, m_connectedQueryTwo))
             Debug.Log("Connected!");
         else
             Debug.Log("Not Connected!");

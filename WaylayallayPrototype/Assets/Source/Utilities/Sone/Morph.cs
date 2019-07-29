@@ -16,13 +16,11 @@ namespace Simplex
     [System.Serializable]
     public class Morph
     {
-        private Hashes m_hashes;
-        private Lookups m_lookups;
+        private Data m_data;
 
         public Morph()
         {
-            m_hashes = new Hashes();
-            m_lookups = new Lookups();
+            m_data = new Data();
         }
 
         public Morph(params MeshFilter[] meshes) : this()
@@ -60,15 +58,15 @@ namespace Simplex
                 a = new Point(matrix.MultiplyPoint(vertices[indexA]), (indexA >= uvs.Length) ? default : uvs[indexA], (indexA >= normals.Length) ? default : matrix.MultiplyVector(normals[indexA]), (indexA >= tangents.Length) ? default : matrix.MultiplyVector(tangents[indexA]));
                 b = new Point(matrix.MultiplyPoint(vertices[indexB]), (indexB >= uvs.Length) ? default : uvs[indexB], (indexB >= normals.Length) ? default : matrix.MultiplyVector(normals[indexB]), (indexB >= tangents.Length) ? default : matrix.MultiplyVector(tangents[indexB]));
                 c = new Point(matrix.MultiplyPoint(vertices[indexC]), (indexC >= uvs.Length) ? default : uvs[indexC], (indexC >= normals.Length) ? default : matrix.MultiplyVector(normals[indexC]), (indexC >= tangents.Length) ? default : matrix.MultiplyVector(tangents[indexC]));
-                
-                m_hashes.AddPoint(a);
-                m_hashes.AddPoint(b);
-                m_hashes.AddPoint(c);
+
+                m_data.AddPoint(a);
+                m_data.AddPoint(b);
+                m_data.AddPoint(c);
 
                 // make a note of any points which share a vertex (for pathing)
-                m_lookups.ConnectPointsInSameLocation(a);
-                m_lookups.ConnectPointsInSameLocation(b);
-                m_lookups.ConnectPointsInSameLocation(c);
+                m_data.ConnectPointsInSameLocation(a);
+                m_data.ConnectPointsInSameLocation(b);
+                m_data.ConnectPointsInSameLocation(c);
 
                 AddTriangle(a, b, c);
             }
@@ -81,7 +79,7 @@ namespace Simplex
         {
             Mesh mesh = new Mesh();
 
-            int pointCount = m_hashes.PointCount;
+            int pointCount = m_data.PointCount;
             Point[] points = new Point[pointCount];
             Vector3[] vertices = new Vector3[pointCount];
             Vector2[] uvs = new Vector2[pointCount];
@@ -89,7 +87,7 @@ namespace Simplex
             Vector4[] tangents = new Vector4[pointCount];
 
             int i = 0;
-            foreach (Point point in m_hashes.Points)
+            foreach (Point point in m_data.Points)
             {
                 points[i] = point;
                 vertices[i] = point.LocalPosition;
@@ -100,10 +98,10 @@ namespace Simplex
                 ++i;
             }
 
-            int[] triangles = new int[m_hashes.TriangleCount * 3];
+            int[] triangles = new int[m_data.TriangleCount * 3];
             i = 0;
 
-            foreach (Triangle triangle in m_hashes.Triangles)
+            foreach (Triangle triangle in m_data.Triangles)
             {
                 for (int j = 0; j < 3; j++)
                 {
@@ -144,7 +142,7 @@ namespace Simplex
         {
             get
             {
-                foreach (Point point in m_hashes.Points)
+                foreach (Point point in m_data.Points)
                     yield return point;
             }
         }
@@ -153,7 +151,7 @@ namespace Simplex
         {
             get
             {
-                return m_hashes == null ? 0 : m_hashes.PointCount;
+                return m_data == null ? 0 : m_data.PointCount;
             }
         }
 
@@ -162,7 +160,7 @@ namespace Simplex
         /// </summary>
         public Point GetPoint(int pointIndex)
         {
-            return m_hashes.GetPoint(pointIndex);
+            return m_data.GetPoint(pointIndex);
         }
 
         /// <summary>
@@ -170,14 +168,14 @@ namespace Simplex
         /// </summary>
         public void SetPoint(int pointIndex, Vector3 localPosition)
         {
-            m_hashes.GetPoint(pointIndex).LocalPosition = localPosition;
-            
-            HashSet<int> colocated = m_lookups.GetColocatedPoints(pointIndex);
+            m_data.GetPoint(pointIndex).LocalPosition = localPosition;
+
+            HashSet<int> colocated = m_data.GetColocatedPoints(pointIndex);
 
             if (colocated != null)
             {
                 foreach (int id in colocated)
-                    m_hashes.GetPoint(id).LocalPosition = localPosition;
+                    m_data.GetPoint(id).LocalPosition = localPosition;
             }
 
         }
@@ -195,8 +193,8 @@ namespace Simplex
         /// </summary>
         public IEnumerable<Point> GetConnectedPoints(Point point)
         {
-            foreach (int connected in m_lookups.ConnectedPoints(point.ID))
-                yield return m_hashes.GetPoint(connected);
+            foreach (int connected in m_data.ConnectedPoints(point.ID))
+                yield return m_data.GetPoint(connected);
         }
 
         /// <summary>
@@ -204,7 +202,7 @@ namespace Simplex
         /// </summary>
         public IEnumerable<Point> GetConnectedPoints(int pointIndex)
         {
-            Point point = m_hashes.GetPoint(pointIndex);
+            Point point = m_data.GetPoint(pointIndex);
 
             if (point == null)
                 yield break;
@@ -214,26 +212,53 @@ namespace Simplex
         }
 
         /// <summary>
-        /// Tries to determine whether it's possible to draw a path from point A to 
-        /// point B, using a breadth-first-search.
+        /// Returns true if the points with the given IDs share an edge.
         /// </summary>
-        public bool IsConnected(Point a, Point b)
+        public bool IsDirectlyConnected(Point a, Point b)
         {
+            return IsDirectlyConnected(a.ID, b.ID);
+        }
+
+        /// <summary>
+        /// Returns true if the given points share an edge.
+        /// </summary>
+        public bool IsDirectlyConnected(int a, int b)
+        {
+            Debug.Assert(m_data.HasPoint(a) && m_data.HasPoint(b), "Both points A and B must be in the Morph.");
+
             if (a == b)
                 return true;
 
-            return IsConnected(a.ID, b.ID);
+            if (m_data.GetConnectedPoints(a).Contains(b))
+                return true;
+
+            return false;
         }
 
         /// <summary>
         /// Tries to determine whether it's possible to draw a path from point A to 
         /// point B, using a breadth-first-search.
         /// </summary>
-        public bool IsConnected(int a, int b)
+        public bool HasPath(Point a, Point b)
         {
-            Debug.Assert(m_hashes.HasPoint(a) && m_hashes.HasPoint(b), "Both points A and B must be in the Morph.");
+            if (a == b)
+                return true;
+
+            return HasPath(a.ID, b.ID);
+        }
+
+        /// <summary>
+        /// Tries to determine whether it's possible to draw a path from point A to 
+        /// point B, using a breadth-first-search.
+        /// </summary>
+        public bool HasPath(int a, int b)
+        {
+            Debug.Assert(m_data.HasPoint(a) && m_data.HasPoint(b), "Both points A and B must be in the Morph.");
 
             if (a == b)
+                return true;
+
+            if (m_data.GetConnectedPoints(a).Contains(b))
                 return true;
 
             Queue<int> queue = new Queue<int>();
@@ -248,7 +273,7 @@ namespace Simplex
                 // Get all connected points of the current point
                 // if a connected point has not been seen, then mark it seen 
                 // and enqueue it 
-                foreach (int connected in m_lookups.ConnectedPoints(current))
+                foreach (int connected in m_data.ConnectedPoints(current))
                 {
                     if (connected == b)
                         return true;
@@ -273,18 +298,13 @@ namespace Simplex
         /// </summary>
         public void AddEdge(Edge edge, bool findNewTriangles = true)
         {
-            if (m_hashes.HasEdge(edge))
+            if (m_data.HasEdge(edge))
                 return;
-
-            m_hashes.AddPoint(edge.A);
-            m_hashes.AddPoint(edge.B);
-
-            m_hashes.AddEdge(edge);
-
-            m_lookups.AddPoint(edge.A);
-            m_lookups.AddPoint(edge.B);
-
-            m_lookups.AddEdge(edge);
+            
+            m_data.AddPoint(edge.A);
+            m_data.AddPoint(edge.B);
+            
+            m_data.AddEdge(edge);
 
             if (findNewTriangles)
             {
@@ -293,13 +313,13 @@ namespace Simplex
                 // 2) get all the points connected to B
                 // 3) compare - if any overlap points P, A-B-P forms a triangle
 
-                HashSet<int> pointsFromB = m_lookups.GetConnectedPoints(edge.B.ID);
+                HashSet<int> pointsFromB = m_data.GetConnectedPoints(edge.B.ID);
 
-                foreach (int pointFromA in m_lookups.GetConnectedPoints(edge.A.ID))
+                foreach (int pointFromA in m_data.GetConnectedPoints(edge.A.ID))
                 {
                     if (pointsFromB.Contains(pointFromA))
                     {
-                        Internal_AddTriangle(new Triangle(edge, m_lookups.GetEdge(edge.B.ID, pointFromA), m_lookups.GetEdge(pointFromA, edge.A.ID)));
+                        Internal_AddTriangle(new Triangle(edge, m_data.GetEdge(edge.B.ID, pointFromA), m_data.GetEdge(pointFromA, edge.A.ID)));
                     }
                 }
             }
@@ -323,9 +343,9 @@ namespace Simplex
         /// </summary>
         public Edge AddEdge(int aIndex, int bIndex, bool findNewTriangles = true)
         {
-            Debug.Assert(m_hashes.HasPoint(aIndex) && m_hashes.HasPoint(bIndex), "Both points A and B must be in the Morph.");
+            Debug.Assert(m_data.HasPoint(aIndex) && m_data.HasPoint(bIndex), "Both points A and B must be in the Morph.");
 
-            return AddEdge(m_hashes.GetPoint(aIndex), m_hashes.GetPoint(bIndex), findNewTriangles);
+            return AddEdge(m_data.GetPoint(aIndex), m_data.GetPoint(bIndex), findNewTriangles);
         }
 
         /// <summary>
@@ -333,11 +353,11 @@ namespace Simplex
         /// </summary>
         public Edge GetEdge(int aIndex, int bIndex)
         {
-            Debug.Assert(m_hashes.HasPoint(aIndex) && m_hashes.HasPoint(bIndex), "Both points A and B must be in the Morph.");
+            Debug.Assert(m_data.HasPoint(aIndex) && m_data.HasPoint(bIndex), "Both points A and B must be in the Morph.");
 
-            Point b = m_hashes.GetPoint(bIndex);
+            Point b = m_data.GetPoint(bIndex);
 
-            foreach (Edge edge in m_lookups.GetEdgesContaining(aIndex))
+            foreach (Edge edge in m_data.GetEdgesContaining(aIndex))
                 if (edge.Contains(b))
                     return edge;
 
@@ -354,14 +374,14 @@ namespace Simplex
         public void AddTriangle(Point a, Point b, Point c)
         {
             if (a.ID == -1)
-                m_hashes.AddPoint(a);
+                m_data.AddPoint(a);
 
             if (b.ID == -1)
-                m_hashes.AddPoint(b);
+                m_data.AddPoint(b);
 
             if (c.ID == -1)
-                m_hashes.AddPoint(c);
-
+                m_data.AddPoint(c);
+            
             Edge ab = new Edge(a, b);
             Edge bc = new Edge(b, c);
             Edge ca = new Edge(c, a);
@@ -378,9 +398,9 @@ namespace Simplex
         /// </summary>
         public void AddTriangle(Vector3 a, Vector3 b, Vector3 c)
         {
-            Point pointA = m_lookups.GetExistingPointInSameLocation(a);
-            Point pointB = m_lookups.GetExistingPointInSameLocation(b);
-            Point pointC = m_lookups.GetExistingPointInSameLocation(c);
+            Point pointA = m_data.GetExistingPointInSameLocation(a);
+            Point pointB = m_data.GetExistingPointInSameLocation(b);
+            Point pointC = m_data.GetExistingPointInSameLocation(c);
 
             AddTriangle(pointA, pointB, pointC);
         }
@@ -390,9 +410,9 @@ namespace Simplex
         /// </summary>
         public void AddTriangle(int a, int b, int c)
         {
-            Point pointA = m_hashes.GetPoint(a);
-            Point pointB = m_hashes.GetPoint(b);
-            Point pointC = m_hashes.GetPoint(c);
+            Point pointA = m_data.GetPoint(a);
+            Point pointB = m_data.GetPoint(b);
+            Point pointC = m_data.GetPoint(c);
 
             Debug.Assert(pointA != null && pointB != null && pointC != null, "All three points used to make a triangle must be in the Morph.");
 
@@ -405,11 +425,10 @@ namespace Simplex
         /// </summary>
         private void Internal_AddTriangle(Triangle triangle)
         {
-            m_hashes.AddTriangle(triangle);
-            m_lookups.AddTriangle(triangle);
+            m_data.AddTriangle(triangle);
 
             bool addedToExistingFace = false;
-            foreach (Face face in m_hashes.Faces)
+            foreach (Face face in m_data.Faces)
             {
                 if (face.TryAddTriangle(triangle))
                 {
@@ -426,10 +445,9 @@ namespace Simplex
 
             if (!addedToExistingFace)
             {
-                Face face = new Face(triangle);
+                Face face = new Face(triangle, m_data);
 
-                m_hashes.AddFace(face);
-                m_lookups.AddFace(face);
+                m_data.AddFace(face);
             }
         }
 
@@ -438,7 +456,7 @@ namespace Simplex
         /// </summary>
         public void FlipNormals()
         {
-            foreach (Triangle triangle in m_hashes.Triangles)
+            foreach (Triangle triangle in m_data.Triangles)
                 triangle.Flip();
         }
 
@@ -450,24 +468,25 @@ namespace Simplex
         {
             get
             {
-                foreach (Face face in m_hashes.Faces)
+                foreach (Face face in m_data.Faces)
                     yield return face;
             }
         }
 
         #endregion
 
-
         #region Editor
 
 #if UNITY_EDITOR
         public void DrawGizmo(Transform transform = null)
         {
-            foreach (Point point in m_hashes.Points)
-                point.DrawNormalGizmo(Color.red, transform);
+            //foreach (Point point in m_hashes.Points)
+            //    point.DrawNormalGizmo(Color.red, transform);
 
-            foreach (Point point in m_hashes.Points)
+            foreach (Point point in m_data.Points)
                 point.DrawPointLabels(Color.black, transform);
+
+            //DrawFaces(transform);
 
             //foreach (Triangle triangle in m_hashes.Triangles)
             //    triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
@@ -480,7 +499,7 @@ namespace Simplex
 
         public void DrawFaces(Transform transform = null)
         {
-            foreach (Face face in m_hashes.Faces)
+            foreach (Face face in m_data.Faces)
             {
                 int hash = face.GetHashCode();
 
@@ -636,10 +655,10 @@ namespace Simplex
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
                 GUIStyle handleStyle = new GUIStyle();
-                handleStyle.normal.textColor = Color.red;
+                handleStyle.normal.textColor = Color.black;
                 handleStyle.fontSize = 10;
 
-                Handles.Label(LocalPosition + Vector3.up * 0.15f, UV.ToString(), handleStyle);
+                Handles.Label(LocalPosition + Normal * 0.15f + new Vector3(0f, ID * 0.01f, 0f), ID.ToString(), handleStyle);
 
                 Handles.matrix = originalHandleMatrix;
             }
@@ -1023,6 +1042,8 @@ namespace Simplex
         {
             private HashSet<Triangle> m_triangles = new HashSet<Triangle>();
 
+            private Data m_data;
+
             private Triangle m_initialTriangle;
 
             public IEnumerable<Triangle> Triangles
@@ -1042,8 +1063,9 @@ namespace Simplex
                 }
             }
 
-            public Face(Triangle triangle)
+            public Face(Triangle triangle, Data lookup)
             {
+                m_data = lookup;
                 m_initialTriangle = triangle;
                 m_triangles.Add(m_initialTriangle);
             }
@@ -1177,6 +1199,8 @@ namespace Simplex
 
                 perimeter.Add(leftMost);
 
+                //Debug.Log("LeftMost point is " + leftMost.ID);
+
                 // STEP 2: Now that we have an algorithm, the tracing part can begin. Essentially, take the last point,
                 // 'swoop' around anticlockwise from the bottom until we hit the next point, and then use that. keep going until
                 // our current point matches our starting point
@@ -1196,8 +1220,13 @@ namespace Simplex
                     for (int i = 0; i < points.Count; i++)
                     {
                         // don't ever look back!
-                        if (points[i] == current)
+                        if (points[i] == current)// || !m_data.GetConnectedPoints(current.ID).Contains(points[i].ID))
                             continue;
+
+                        //if (!m_data.GetConnectedPoints(current.ID).Contains(points[i].ID))
+                        //{
+                        //    Debug.Log("Not considering " + points[i].ID + " because it's not connected to " + current.ID);
+                        //}
 
                         float angle = Vector2.SignedAngle(referenceDirection, (points[i].RotateBy(normalizingRotation) - current.RotateBy(normalizingRotation)).normalized);
 
@@ -1222,6 +1251,8 @@ namespace Simplex
                     referenceDirection = (current.RotateBy(normalizingRotation) - bestPoint.RotateBy(normalizingRotation)).normalized;
 
                     current = bestPoint;
+
+                    //Debug.Log("Next point is " + current.ID);
 
                     if (current == start)
                         break;
@@ -1304,28 +1335,168 @@ namespace Simplex
 
         #endregion
 
-        #region Organization Classes
+        #region Data Class
 
         /// <summary>
-        /// This class stores all objects which make up this morph.
+        /// This class allows quickly checking which objects (edges, triangles, faces) contain certain points.
         /// </summary>
         [System.Serializable]
-        private class Hashes
+        public class Data
         {
-            private Dictionary<int, Point> m_points = new Dictionary<int, Point>();
+            private Dictionary<int, Point> m_pointsByID = new Dictionary<int, Point>();
+            private Dictionary<int, HashSet<Edge>> m_edgesByID = new Dictionary<int, HashSet<Edge>>();
+            private Dictionary<int, HashSet<Triangle>> m_trianglesByID = new Dictionary<int, HashSet<Triangle>>();
 
             private HashSet<Edge> m_edges = new HashSet<Edge>();
             private HashSet<Triangle> m_triangles = new HashSet<Triangle>();
             private HashSet<Face> m_faces = new HashSet<Face>();
 
+            private Dictionary<int, HashSet<Point>> m_pointsByLocation = new Dictionary<int, HashSet<Point>>();
+
+            private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
+            private Dictionary<int, HashSet<int>> m_samePoints = new Dictionary<int, HashSet<int>>();
+
             private int m_highestPointIndex = 0;
             private int m_highestTriangleIndex = 0;
+
+            public void AddEdge(Edge edge)
+            {
+                m_edges.Add(edge);
+
+                AddConnection(edge.A, edge.B);
+
+                if (!m_edgesByID.ContainsKey(edge.A.ID))
+                    m_edgesByID.Add(edge.A.ID, new HashSet<Edge>());
+
+                m_edgesByID[edge.A.ID].Add(edge);
+
+                if (!m_edgesByID.ContainsKey(edge.B.ID))
+                    m_edgesByID.Add(edge.B.ID, new HashSet<Edge>());
+
+                m_edgesByID[edge.B.ID].Add(edge);
+            }
+
+            public void AddConnection(Point a, Point b, bool isSamePoint = false)
+            {
+                AddConnection(a.ID, b.ID, isSamePoint || a == b);
+            }
+
+            public void AddConnection(int a, int b, bool isSamePoint = false)
+            {
+                bool debug = (a == 5 || b == 5 || a == 11 || b == 11);
+
+                if (debug)
+                    Debug.Log("Intentionally connecting " + a + " to " + b);
+
+                if (!m_connectedPoints.ContainsKey(a))
+                    m_connectedPoints.Add(a, new HashSet<int>());
+
+                m_connectedPoints[a].Add(b);
+
+                if (!m_connectedPoints.ContainsKey(b))
+                    m_connectedPoints.Add(b, new HashSet<int>());
+
+                m_connectedPoints[b].Add(a);
+
+                if (m_samePoints.ContainsKey(a))
+                {
+                    if (debug)
+                        Debug.Log("The points which are the same as " + a + " are as follows:");
+
+                    foreach (int sameAsA in m_samePoints[a])
+                    {
+                        if (sameAsA == b || sameAsA == a)
+                            continue;
+
+                        if (debug)
+                            Debug.Log(sameAsA);
+
+                        if (!m_connectedPoints.ContainsKey(sameAsA))
+                            m_connectedPoints.Add(sameAsA, new HashSet<int>());
+
+                        m_connectedPoints[sameAsA].Add(b);
+                        m_connectedPoints[b].Add(sameAsA);
+
+                        if (debug)
+                            Debug.Log("Also connecting " + sameAsA + " and " + b);
+                    }
+                }
+
+                if (m_samePoints.ContainsKey(b))
+                {
+                    if (debug)
+                        Debug.Log("The points which are the same as " + b + " are as follows:");
+
+                    foreach (int sameAsB in m_samePoints[b])
+                    {
+                        if (sameAsB == a || sameAsB == b)
+                            continue;
+
+                        if (debug)
+                            Debug.Log(sameAsB);
+
+                        if (!m_connectedPoints.ContainsKey(sameAsB))
+                            m_connectedPoints.Add(sameAsB, new HashSet<int>());
+
+                        m_connectedPoints[sameAsB].Add(a);
+                        m_connectedPoints[a].Add(sameAsB);
+
+                        if (debug)
+                            Debug.Log("Also connecting " + sameAsB + " and " + a);
+                    }
+                }
+                
+                if (isSamePoint)
+                {
+                    if (!m_samePoints.ContainsKey(a))
+                        m_samePoints.Add(a, new HashSet<int>());
+
+                    m_samePoints[a].Add(b);
+
+                    if (!m_samePoints.ContainsKey(b))
+                        m_samePoints.Add(b, new HashSet<int>());
+
+                    m_samePoints[b].Add(a);
+                    
+                    // unlike connectedness, sameness is totally transitive. if A = B and A = C then A = C
+                    foreach (int sameAsA in m_samePoints[a])
+                        m_samePoints[b].Add(sameAsA);
+                    
+                    foreach (int sameAsB in m_samePoints[b])
+                        m_samePoints[a].Add(sameAsB);
+                }
+            }
+
+            public IEnumerable<int> ConnectedPoints(int id)
+            {
+                if (!m_connectedPoints.ContainsKey(id))
+                    yield break;
+
+                foreach (int connected in m_connectedPoints[id])
+                    yield return connected;
+            }
+
+            public HashSet<int> GetConnectedPoints(int id)
+            {
+                if (!m_connectedPoints.ContainsKey(id))
+                    return null;
+
+                return m_connectedPoints[id];
+            }
+
+            public HashSet<int> GetColocatedPoints(int id)
+            {
+                if (!m_samePoints.ContainsKey(id))
+                    return null;
+
+                return m_samePoints[id];
+            }
 
             public int PointCount
             {
                 get
                 {
-                    return m_points.Count;
+                    return m_pointsByID.Count;
                 }
             }
 
@@ -1333,7 +1504,7 @@ namespace Simplex
             {
                 get
                 {
-                    foreach (KeyValuePair<int, Point> kvp in m_points)
+                    foreach (KeyValuePair<int, Point> kvp in m_pointsByID)
                         yield return kvp.Value;
                 }
             }
@@ -1388,49 +1559,29 @@ namespace Simplex
                         yield return face;
                 }
             }
-
-            // TODO: need to check whether we already have this point,
-            // even though we want to use IDs to track points and the point may not have an ID yet...
-            public void AddPoint(Point point)
+            public IEnumerable<Edge> GetEdgesContaining(int id)
             {
-                if (point.ID == -1)
-                    point.SetID(m_highestPointIndex);
+                if (!m_edgesByID.ContainsKey(id))
+                    yield break;
 
-                if (!m_points.ContainsKey(point.ID))
-                {
-                    ++m_highestPointIndex;
-
-                    m_points.Add(point.ID, point);
-                }
+                foreach (Edge edge in m_edgesByID[id])
+                    yield return edge;
             }
 
-            public void RemovePoint(Point point)
+            public IEnumerable<Edge> GetEdgesContaining(Point point)
             {
-                m_points.Remove(point.ID);
+                return GetEdgesContaining(point.ID);
             }
 
-            public bool HasPoint(Point point)
+            public Edge GetEdge(int a, int b)
             {
-                return HasPoint(point.ID);
+                foreach (Edge edge in GetEdgesContaining(a))
+                    if (edge.Contains(b))
+                        return edge;
+
+                return null;
             }
 
-            public bool HasPoint(int id)
-            {
-                return m_points.ContainsKey(id);
-            }
-
-            public Point GetPoint(int id)
-            {
-                if (!m_points.ContainsKey(id))
-                    return null;
-
-                return m_points[id];
-            }
-
-            public void AddEdge(Edge edge)
-            {
-                m_edges.Add(edge);
-            }
 
             public void RemoveEdge(Edge edge)
             {
@@ -1442,12 +1593,32 @@ namespace Simplex
                 return m_edges.Contains(edge);
             }
 
+
             public void AddTriangle(Triangle triangle)
             {
                 if (triangle.ID == -1)
                     triangle.SetID(m_highestTriangleIndex++);
 
                 m_triangles.Add(triangle);
+
+                foreach (Point point in triangle.Points)
+                {
+                    if (!m_trianglesByID.ContainsKey(point.ID))
+                        m_trianglesByID.Add(point.ID, new HashSet<Triangle>());
+
+                    m_trianglesByID[point.ID].Add(triangle);
+                }
+
+                foreach (Edge edge in triangle.Edges)
+                {
+                    AddEdge(edge);
+                }
+            }
+
+            public IEnumerable<Triangle> GetTrianglesContaining(Point point)
+            {
+                foreach (Triangle triangle in m_trianglesByID[point.ID])
+                    yield return triangle;
             }
 
             public void RemoveTriangle(Triangle triangle)
@@ -1474,158 +1645,27 @@ namespace Simplex
             {
                 return m_faces.Contains(face);
             }
-        }
-
-        /// <summary>
-        /// This class allows quickly checking which objects (edges, triangles, faces) contain certain points.
-        /// </summary>
-        [System.Serializable]
-        private class Lookups
-        {
-            private Dictionary<int, HashSet<Point>> m_pointsByLocation = new Dictionary<int, HashSet<Point>>();
-
-            private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
-            private Dictionary<int, HashSet<int>> m_samePoints = new Dictionary<int, HashSet<int>>();
-
-            private Dictionary<int, HashSet<Edge>> m_edges = new Dictionary<int, HashSet<Edge>>();
-
-            private Dictionary<int, HashSet<Triangle>> m_triangles = new Dictionary<int, HashSet<Triangle>>();
-
-            private Dictionary<int, HashSet<Face>> m_faces = new Dictionary<int, HashSet<Face>>();
-
-            public void AddEdge(Edge edge)
-            {
-                AddConnection(edge.A, edge.B);
-
-                if (!m_edges.ContainsKey(edge.A.ID))
-                    m_edges.Add(edge.A.ID, new HashSet<Edge>());
-
-                m_edges[edge.A.ID].Add(edge);
-
-                if (!m_edges.ContainsKey(edge.B.ID))
-                    m_edges.Add(edge.B.ID, new HashSet<Edge>());
-
-                m_edges[edge.B.ID].Add(edge);
-            }
-
-            public void AddConnection(Point a, Point b, bool isSamePoint = false)
-            {
-                AddConnection(a.ID, b.ID, isSamePoint);
-            }
-
-            public void AddConnection(int a, int b, bool isSamePoint = false)
-            {
-                if (!m_connectedPoints.ContainsKey(a))
-                    m_connectedPoints.Add(a, new HashSet<int>());
-
-                m_connectedPoints[a].Add(b);
-
-                if (!m_connectedPoints.ContainsKey(b))
-                    m_connectedPoints.Add(b, new HashSet<int>());
-
-                m_connectedPoints[b].Add(a);
-
-                if (isSamePoint)
-                {
-                    if (!m_samePoints.ContainsKey(a))
-                        m_samePoints.Add(a, new HashSet<int>());
-
-                    m_samePoints[a].Add(b);
-
-                    if (!m_samePoints.ContainsKey(b))
-                        m_samePoints.Add(b, new HashSet<int>());
-
-                    m_samePoints[b].Add(a);
-
-                    // unlike connectedness, sameness is totally transitive. if A = B and A = C then A = C
-                    foreach (int sameAsA in m_samePoints[a])
-                        m_samePoints[b].Add(sameAsA);
-
-                    foreach (int sameAsB in m_samePoints[b])
-                        m_samePoints[a].Add(sameAsB);
-                }
-            }
-
-            public IEnumerable<int> ConnectedPoints(int id)
-            {
-                if (!m_connectedPoints.ContainsKey(id))
-                    yield break;
-
-                foreach (int connected in m_connectedPoints[id])
-                    yield return connected;
-            }
-
-            public HashSet<int> GetConnectedPoints(int id)
-            {
-                if (!m_connectedPoints.ContainsKey(id))
-                    return null;
-
-                return m_connectedPoints[id];
-            }
-
-            public HashSet<int> GetColocatedPoints(int id)
-            {
-                if (!m_samePoints.ContainsKey(id))
-                    return null;
-
-                return m_samePoints[id];
-            }
-
-            public IEnumerable<Edge> GetEdgesContaining(int id)
-            {
-                if (!m_edges.ContainsKey(id))
-                    yield break;
-
-                foreach (Edge edge in m_edges[id])
-                    yield return edge;
-            }
-
-            public IEnumerable<Edge> GetEdgesContaining(Point point)
-            {
-                return GetEdgesContaining(point.ID);
-            }
-
-            public Edge GetEdge(int a, int b)
-            {
-                foreach (Edge edge in GetEdgesContaining(a))
-                    if (edge.Contains(b))
-                        return edge;
-
-                return null;
-            }
-
-            public void AddTriangle(Triangle triangle)
-            {
-                foreach (Point point in triangle.Points)
-                {
-                    if (!m_triangles.ContainsKey(point.ID))
-                        m_triangles.Add(point.ID, new HashSet<Triangle>());
-
-                    m_triangles[point.ID].Add(triangle);
-                }
-
-                foreach (Edge edge in triangle.Edges)
-                {
-                    AddEdge(edge);
-                }
-            }
-
-            public IEnumerable<Triangle> GetTrianglesContaining(Point point)
-            {
-                foreach (Triangle triangle in m_triangles[point.ID])
-                    yield return triangle;
-            }
 
             /// <summary>
             /// Returns whether there are any triangles in the morph with the given edge.
             /// </summary>
             public bool IsEdgeInTriangle(Edge edge)
             {
-                return m_triangles.ContainsKey(edge.A.ID) || m_triangles.ContainsKey(edge.B.ID);
+                return m_trianglesByID.ContainsKey(edge.A.ID) || m_trianglesByID.ContainsKey(edge.B.ID);
             }
 
             public void AddPoint(Point point)
             {
+                if (point.ID == -1)
+                    point.SetID(m_highestPointIndex);
+
+                if (!m_pointsByID.ContainsKey(point.ID))
+                {
+                    ++m_highestPointIndex;
+
+                    m_pointsByID.Add(point.ID, point);
+                }
+
                 int locationID = point.GetLocationID();
 
                 if (!m_pointsByLocation.ContainsKey(locationID))
@@ -1634,6 +1674,31 @@ namespace Simplex
                 m_pointsByLocation[locationID].Add(point);
             }
 
+
+            public void RemovePoint(Point point)
+            {
+                m_pointsByID.Remove(point.ID);
+            }
+
+            public bool HasPoint(Point point)
+            {
+                return HasPoint(point.ID);
+            }
+
+            public bool HasPoint(int id)
+            {
+                return m_pointsByID.ContainsKey(id);
+            }
+
+            public Point GetPoint(int id)
+            {
+                if (!m_pointsByID.ContainsKey(id))
+                    return null;
+
+                return m_pointsByID[id];
+            }
+
+
             /// <summary>
             /// This method needs to be called whenever a point moves in the mesh.
             /// 
@@ -1641,19 +1706,19 @@ namespace Simplex
             /// and then only moving the dirty ones in this method
             /// TODO: This needs to be called whenever a point position is changed
             /// </summary>
-            public void RegeneratePointByLocationLookup()
-            {
-                List<Point> points = new List<Point>(m_pointsByLocation.Count);
+            //public void RegeneratePointByLocationLookup()
+            //{
+            //    List<Point> points = new List<Point>(m_pointsByLocation.Count);
 
-                foreach (KeyValuePair<int, HashSet<Point>> kvp in m_pointsByLocation)
-                    foreach (Point point in kvp.Value)
-                        points.Add(point);
+            //    foreach (KeyValuePair<int, HashSet<Point>> kvp in m_pointsByLocation)
+            //        foreach (Point point in kvp.Value)
+            //            points.Add(point);
 
-                m_pointsByLocation.Clear();
+            //    m_pointsByLocation.Clear();
 
-                foreach (Point point in points)
-                    AddPoint(point);
-            }
+            //    foreach (Point point in points)
+            //        AddPoint(point);
+            //}
 
             /// <summary>
             /// If we already have a point object in the exact same location as the given point object,
@@ -1671,6 +1736,9 @@ namespace Simplex
                 {
                     foreach (Point existing in m_pointsByLocation[locationID])
                     {
+                        if (existing.ID == point.ID)
+                            continue;
+
                         AddConnection(existing, point, isSamePoint: true);
                         AddConnection(point, existing, isSamePoint: true);
                     }
@@ -1692,12 +1760,6 @@ namespace Simplex
                 // point is at a new location so it's ok to use
                 return vec.ToPoint();
             }
-
-            public void AddFace(Face face)
-            {
-
-            }
-
         }
 
         #endregion
