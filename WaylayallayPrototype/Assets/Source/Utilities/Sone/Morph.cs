@@ -160,18 +160,47 @@ namespace Simplex
         }
 
         /// <summary>
+        /// Returns true if a point with the given index exists.
+        /// </summary>
+        public bool HasPoint(int pointIndex)
+        {
+            return m_data.HasPoint(pointIndex);
+        }
+
+        /// <summary>
+        /// Removes the point with the given ID. Can indirectly destroy triangles, edges, faces, etc.
+        /// </summary>
+        public void RemovePoint(int pointId)
+        {
+            m_data.RemovePoint(pointId);
+        }
+
+        /// <summary>
         /// Set the point with the given index to the given position, as well as all attached points.
         /// </summary>
         public void SetPoint(int pointIndex, Vector3 localPosition)
         {
-            m_data.GetPoint(pointIndex).LocalPosition = localPosition;
+            Point point = m_data.GetPoint(pointIndex);
+
+            if (point == null)
+                return;
+
+            int oldHash = point.GetLocationID();
+
+            point.LocalPosition = localPosition;
+
+            m_data.RelocatePoint(point, oldHash);
 
             HashSet<int> colocated = m_data.GetColocatedPoints(pointIndex);
 
             if (colocated != null)
             {
                 foreach (int id in colocated)
-                    m_data.GetPoint(id).LocalPosition = localPosition;
+                {
+                    point = m_data.GetPoint(id);
+                    point.LocalPosition = localPosition;
+                    m_data.RelocatePoint(point, oldHash);
+                }
             }
         }
 
@@ -462,6 +491,47 @@ namespace Simplex
             }
         }
 
+        /// <summary>
+        /// Return the face with the given ID, if it exists.
+        /// </summary>
+        public Face GetFace(int faceId)
+        {
+            return m_data.GetFace(faceId);
+        }
+
+        /// <summary>
+        /// Remove the face with the given ID, if it exists.
+        /// </summary>
+        public void RemoveFace(int faceId)
+        {
+            m_data.RemoveFace(faceId);
+        }
+
+        /// <summary>
+        /// Given a face ID, try to retriangulate the face to a simpler set of triangles. 
+        /// 
+        /// Doesn't have much regard for things like UVs and normals.
+        /// </summary>
+        public bool TryRetriangulateFace(int faceId)
+        {
+            Face face = m_data.GetFace(faceId);
+
+            if (face == null)
+                return false;
+            
+            if (!face.Retriangulate(out List<Point> points))
+                return false;
+
+            m_data.RemoveFace(faceId);
+
+            for (int i = 0; i < points.Count; i += 3)
+            {
+                AddTriangle(points[i], points[i + 1], points[i + 2]);
+            }
+
+            return true;
+        }
+
         #endregion
 
         #region Editor
@@ -469,7 +539,7 @@ namespace Simplex
 #if UNITY_EDITOR
         public void DrawGizmo(Transform transform = null)
         {
-            //foreach (Point point in m_hashes.Points)
+            //foreach (Point point in m_data.Points)
             //    point.DrawNormalGizmo(Color.red, transform);
 
             foreach (Point point in m_data.Points)
@@ -477,11 +547,11 @@ namespace Simplex
 
             //DrawFaces(transform);
 
-            //foreach (Triangle triangle in m_hashes.Triangles)
-            //    triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
+            foreach (Triangle triangle in m_data.Triangles)
+                triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform);
 
             //// orphans :(
-            //foreach (Edge edge in m_hashes.Edges)
+            //foreach (Edge edge in m_data.Edges)
             //    if (!m_lookups.IsEdgeInTriangle(edge))
             //        edge.DrawGizmo(Color.red, transform: transform);
         }
@@ -667,7 +737,6 @@ namespace Simplex
 #endif
             }
         }
-
 
         /// <summary>
         /// Represents the connection of 2 points to form an edge of the mesh.
@@ -1026,6 +1095,8 @@ namespace Simplex
 
             private Triangle m_initialTriangle;
 
+            public int ID { get; private set; } = -1;
+
             public IEnumerable<Triangle> Triangles
             {
                 get
@@ -1139,6 +1210,14 @@ namespace Simplex
             }
 
             /// <summary>
+            /// Set a unique ID for this face.
+            /// </summary>
+            public void SetID(int id)
+            {
+                ID = id;
+            }
+
+            /// <summary>
             /// Generate a list of Points which defines the perimeter of this face in clockwise winding order.
             /// 
             /// This may be problematic on a Morph which is not collapse colocated points.
@@ -1246,20 +1325,45 @@ namespace Simplex
                     perimeter.Add(current);
                 }
 
-                perimeter.Add(start);
-
                 return perimeter;
             }
 
-
-            public bool Retriangulate(List<Triangle> result)
+            public bool Retriangulate(out List<Point> result)
             {
                 List<Point> perimeter = GetPerimeter();
+                result = null;
+
                 int triangleCount = m_triangles.Count;
-                int n = perimeter.Count;
+                int pointCount = perimeter.Count;
 
+                // can't get any better
+                if (pointCount - triangleCount == 2)
+                    return false;
 
-                throw new System.NotImplementedException();
+                Vector2[] vecPerimeter = new Vector2[pointCount];
+
+                for (int i = 0; i < pointCount; i++)
+                    vecPerimeter[i] = perimeter[i].To2D(Normal);
+
+                Triangulator triangulator = new Triangulator(vecPerimeter);
+
+                int[] triangulation = triangulator.Triangulate();
+
+                // new triangulation is somehow worse, don't bother continuing
+                if ((triangulation.Length / 3) >= triangleCount)
+                {
+                    Debug.Log((triangulation.Length / 3) + " is greater than " + triangleCount);
+                    return false;
+                }
+
+                result = new List<Point>(triangulation.Length);
+
+                for (int i = 0; i < triangulation.Length; i++)
+                {
+                    result.Add(perimeter[triangulation[i]]);
+                }
+                
+                return true;
             }
 
             public float CalculateArea(List<Point> perimeter = null)
@@ -1319,525 +1423,603 @@ namespace Simplex
 #endif
             }
         }
-            #endregion
 
-            #region Data Class
+        #endregion
 
-            /// <summary>
-            /// This class allows quickly checking which objects (edges, triangles, faces) contain certain points.
-            /// </summary>
-            [System.Serializable]
-            public class Data
+        #region Data Class
+
+        /// <summary>
+        /// This class allows quickly checking which objects (edges, triangles, faces) contain certain points.
+        /// </summary>
+        [System.Serializable]
+        public class Data
+        {
+            private Dictionary<int, Point> m_pointsByID = new Dictionary<int, Point>();
+            private Dictionary<int, HashSet<Edge>> m_edgesByPointID = new Dictionary<int, HashSet<Edge>>();
+            private Dictionary<int, HashSet<Triangle>> m_trianglesByPointID = new Dictionary<int, HashSet<Triangle>>();
+            private Dictionary<int, Face> m_facesByID = new Dictionary<int, Face>();
+
+            private HashSet<Edge> m_edges = new HashSet<Edge>();
+            private HashSet<Triangle> m_triangles = new HashSet<Triangle>();
+
+            private Dictionary<int, HashSet<Point>> m_pointsByLocation = new Dictionary<int, HashSet<Point>>();
+
+            private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
+            private Dictionary<int, HashSet<int>> m_samePoints = new Dictionary<int, HashSet<int>>();
+
+            private int m_highestPointIndex = 0;
+            private int m_highestTriangleIndex = 0;
+            private int m_highestFaceIndex = 0;
+
+            public void AddEdge(Edge edge)
             {
-                private Dictionary<int, Point> m_pointsByID = new Dictionary<int, Point>();
-                private Dictionary<int, HashSet<Edge>> m_edgesByID = new Dictionary<int, HashSet<Edge>>();
-                private Dictionary<int, HashSet<Triangle>> m_trianglesByID = new Dictionary<int, HashSet<Triangle>>();
+                // Prevent adding duplicate edges
+                // not necessarym but might be useful if we want to start using collections which don't have restrictions
+                // on duplicates
+                if (m_edgesByPointID.ContainsKey(edge.A.ID) && m_edgesByPointID[edge.A.ID].Contains(edge))
+                    return;
 
-                private HashSet<Edge> m_edges = new HashSet<Edge>();
-                private HashSet<Triangle> m_triangles = new HashSet<Triangle>();
-                private HashSet<Face> m_faces = new HashSet<Face>();
+                m_edges.Add(edge);
 
-                private Dictionary<int, HashSet<Point>> m_pointsByLocation = new Dictionary<int, HashSet<Point>>();
+                AddConnection(edge.A, edge.B);
 
-                private Dictionary<int, HashSet<int>> m_connectedPoints = new Dictionary<int, HashSet<int>>();
-                private Dictionary<int, HashSet<int>> m_samePoints = new Dictionary<int, HashSet<int>>();
+                if (!m_edgesByPointID.ContainsKey(edge.A.ID))
+                    m_edgesByPointID.Add(edge.A.ID, new HashSet<Edge>());
 
-                private int m_highestPointIndex = 0;
-                private int m_highestTriangleIndex = 0;
+                m_edgesByPointID[edge.A.ID].Add(edge);
 
-                public void AddEdge(Edge edge)
+                if (!m_edgesByPointID.ContainsKey(edge.B.ID))
+                    m_edgesByPointID.Add(edge.B.ID, new HashSet<Edge>());
+
+                m_edgesByPointID[edge.B.ID].Add(edge);
+            }
+
+            public void AddConnection(Point a, Point b, bool isSamePoint = false)
+            {
+                AddConnection(a.ID, b.ID, isSamePoint || a == b);
+            }
+
+            public void AddConnection(int a, int b, bool isSamePoint = false)
+            {
+                bool debug = false;
+
+                if (debug)
+                    Debug.Log("Intentionally connecting " + a + " to " + b);
+
+                if (!m_connectedPoints.ContainsKey(a))
+                    m_connectedPoints.Add(a, new HashSet<int>());
+
+                m_connectedPoints[a].Add(b);
+
+                if (!m_connectedPoints.ContainsKey(b))
+                    m_connectedPoints.Add(b, new HashSet<int>());
+
+                m_connectedPoints[b].Add(a);
+
+                if (isSamePoint)
                 {
-                    // Prevent adding duplicate edges
-                    // not necessarym but might be useful if we want to start using collections which don't have restrictions
-                    // on duplicates
-                    if (m_edgesByID.ContainsKey(edge.A.ID) && m_edgesByID[edge.A.ID].Contains(edge))
-                        return;
+                    if (!m_samePoints.ContainsKey(a))
+                        m_samePoints.Add(a, new HashSet<int>());
 
-                    m_edges.Add(edge);
+                    m_samePoints[a].Add(b);
 
-                    AddConnection(edge.A, edge.B);
+                    if (!m_samePoints.ContainsKey(b))
+                        m_samePoints.Add(b, new HashSet<int>());
 
-                    if (!m_edgesByID.ContainsKey(edge.A.ID))
-                        m_edgesByID.Add(edge.A.ID, new HashSet<Edge>());
-
-                    m_edgesByID[edge.A.ID].Add(edge);
-
-                    if (!m_edgesByID.ContainsKey(edge.B.ID))
-                        m_edgesByID.Add(edge.B.ID, new HashSet<Edge>());
-
-                    m_edgesByID[edge.B.ID].Add(edge);
-                }
-
-                public void AddConnection(Point a, Point b, bool isSamePoint = false)
-                {
-                    AddConnection(a.ID, b.ID, isSamePoint || a == b);
-                }
-
-                public void AddConnection(int a, int b, bool isSamePoint = false)
-                {
-                    bool debug = false;
+                    m_samePoints[b].Add(a);
 
                     if (debug)
-                        Debug.Log("Intentionally connecting " + a + " to " + b);
+                        Debug.Log($"{a} and {b} are the same point");
 
-                    if (!m_connectedPoints.ContainsKey(a))
-                        m_connectedPoints.Add(a, new HashSet<int>());
-
-                    m_connectedPoints[a].Add(b);
-
-                    if (!m_connectedPoints.ContainsKey(b))
-                        m_connectedPoints.Add(b, new HashSet<int>());
-
-                    m_connectedPoints[b].Add(a);
-
-                    if (isSamePoint)
+                    foreach (int sameAsA in m_samePoints[a])
                     {
-                        if (!m_samePoints.ContainsKey(a))
-                            m_samePoints.Add(a, new HashSet<int>());
-
-                        m_samePoints[a].Add(b);
-
-                        if (!m_samePoints.ContainsKey(b))
-                            m_samePoints.Add(b, new HashSet<int>());
-
-                        m_samePoints[b].Add(a);
-
                         if (debug)
-                            Debug.Log($"{a} and {b} are the same point");
+                            Debug.Log($"Checking {sameAsA} for new connections");
+
+                        m_samePoints[sameAsA].Add(b);
+                        m_samePoints[b].Add(sameAsA);
+
+                        foreach (int connectedToSameAsA in m_connectedPoints[sameAsA])
+                        {
+                            if (a == connectedToSameAsA)
+                                continue;
+
+                            if (!m_connectedPoints.ContainsKey(connectedToSameAsA))
+                                m_connectedPoints.Add(connectedToSameAsA, new HashSet<int>());
+
+                            m_connectedPoints[connectedToSameAsA].Add(a);
+                            m_connectedPoints[a].Add(connectedToSameAsA);
+
+                            if (debug)
+                                Debug.Log($"Virtually connecting {a} and {connectedToSameAsA}");
+                        }
+                    }
+
+                    foreach (int sameAsB in m_samePoints[b])
+                    {
+                        if (debug)
+                            Debug.Log($"Checking {sameAsB} for new connections");
+
+                        m_samePoints[sameAsB].Add(a);
+                        m_samePoints[a].Add(sameAsB);
+
+                        foreach (int connectedToSameAsB in m_connectedPoints[sameAsB])
+                        {
+                            if (b == connectedToSameAsB)
+                                continue;
+
+                            if (!m_connectedPoints.ContainsKey(connectedToSameAsB))
+                                m_connectedPoints.Add(connectedToSameAsB, new HashSet<int>());
+
+                            m_connectedPoints[connectedToSameAsB].Add(b);
+                            m_connectedPoints[b].Add(connectedToSameAsB);
+
+                            if (debug)
+                                Debug.Log($"Virtually connecting {b} and {connectedToSameAsB}");
+                        }
+                    }
+                }
+                else
+                {
+                    if (debug)
+                        Debug.Log($"{a} and {b} are NOT the same point");
+
+                    if (m_samePoints.ContainsKey(a))
+                    {
+                        if (debug)
+                            Debug.Log($"{a} has some same points...");
 
                         foreach (int sameAsA in m_samePoints[a])
                         {
+                            if (!m_connectedPoints.ContainsKey(sameAsA))
+                                m_connectedPoints.Add(sameAsA, new HashSet<int>());
+
+                            m_connectedPoints[sameAsA].Add(b);
+                            m_connectedPoints[b].Add(sameAsA);
+
                             if (debug)
-                                Debug.Log($"Checking {sameAsA} for new connections");
-
-                            m_samePoints[sameAsA].Add(b);
-                            m_samePoints[b].Add(sameAsA);
-
-                            foreach (int connectedToSameAsA in m_connectedPoints[sameAsA])
-                            {
-                                if (a == connectedToSameAsA)
-                                    continue;
-
-                                if (!m_connectedPoints.ContainsKey(connectedToSameAsA))
-                                    m_connectedPoints.Add(connectedToSameAsA, new HashSet<int>());
-
-                                m_connectedPoints[connectedToSameAsA].Add(a);
-                                m_connectedPoints[a].Add(connectedToSameAsA);
-
-                                if (debug)
-                                    Debug.Log($"Virtually connecting {a} and {connectedToSameAsA}");
-                            }
+                                Debug.Log($"Virtually connecting {b} and {sameAsA}");
                         }
+                    }
+
+                    if (m_samePoints.ContainsKey(b))
+                    {
+                        if (debug)
+                            Debug.Log($"{b} has some same points...");
 
                         foreach (int sameAsB in m_samePoints[b])
                         {
+                            if (!m_connectedPoints.ContainsKey(sameAsB))
+                                m_connectedPoints.Add(sameAsB, new HashSet<int>());
+
+                            m_connectedPoints[sameAsB].Add(a);
+                            m_connectedPoints[a].Add(sameAsB);
+
                             if (debug)
-                                Debug.Log($"Checking {sameAsB} for new connections");
-
-                            m_samePoints[sameAsB].Add(a);
-                            m_samePoints[a].Add(sameAsB);
-
-                            foreach (int connectedToSameAsB in m_connectedPoints[sameAsB])
-                            {
-                                if (b == connectedToSameAsB)
-                                    continue;
-
-                                if (!m_connectedPoints.ContainsKey(connectedToSameAsB))
-                                    m_connectedPoints.Add(connectedToSameAsB, new HashSet<int>());
-
-                                m_connectedPoints[connectedToSameAsB].Add(b);
-                                m_connectedPoints[b].Add(connectedToSameAsB);
-
-                                if (debug)
-                                    Debug.Log($"Virtually connecting {b} and {connectedToSameAsB}");
-                            }
+                                Debug.Log($"Virtually connecting {a} and {sameAsB}");
                         }
                     }
-                    else
-                    {
-                        if (debug)
-                            Debug.Log($"{a} and {b} are NOT the same point");
-
-                        if (m_samePoints.ContainsKey(a))
-                        {
-                            if (debug)
-                                Debug.Log($"{a} has some same points...");
-
-                            foreach (int sameAsA in m_samePoints[a])
-                            {
-                                if (!m_connectedPoints.ContainsKey(sameAsA))
-                                    m_connectedPoints.Add(sameAsA, new HashSet<int>());
-
-                                m_connectedPoints[sameAsA].Add(b);
-                                m_connectedPoints[b].Add(sameAsA);
-
-                                if (debug)
-                                    Debug.Log($"Virtually connecting {b} and {sameAsA}");
-                            }
-                        }
-
-                        if (m_samePoints.ContainsKey(b))
-                        {
-                            if (debug)
-                                Debug.Log($"{b} has some same points...");
-
-                            foreach (int sameAsB in m_samePoints[b])
-                            {
-                                if (!m_connectedPoints.ContainsKey(sameAsB))
-                                    m_connectedPoints.Add(sameAsB, new HashSet<int>());
-
-                                m_connectedPoints[sameAsB].Add(a);
-                                m_connectedPoints[a].Add(sameAsB);
-
-                                if (debug)
-                                    Debug.Log($"Virtually connecting {a} and {sameAsB}");
-                            }
-                        }
-                    }
-                }
-
-                public IEnumerable<int> ConnectedPoints(int id)
-                {
-                    if (!m_connectedPoints.ContainsKey(id))
-                        yield break;
-
-                    foreach (int connected in m_connectedPoints[id])
-                        yield return connected;
-                }
-
-                /// <summary>
-                /// Returns whether the two points with the given IDs exist and either both map to the same point,
-                /// or are connected by one edge.
-                /// </summary>
-                public bool IsDirectlyConnected(int a, int b)
-                {
-                    if ((m_connectedPoints.ContainsKey(a) && m_connectedPoints[a].Contains(b)) || (m_connectedPoints.ContainsKey(b) && m_connectedPoints[b].Contains(a)))
-                        return true;
-
-                    //if (m_samePoints.ContainsKey(a))
-                    //{
-                    //    foreach (int samePointAsA in m_samePoints[a])
-                    //        if ((m_connectedPoints.ContainsKey(samePointAsA) && m_connectedPoints[samePointAsA].Contains(b)) || (m_connectedPoints.ContainsKey(b) && m_connectedPoints[b].Contains(samePointAsA)))
-                    //            return true;
-                    //}
-
-                    //if (m_samePoints.ContainsKey(b))
-                    //{
-                    //    foreach (int samePointAsB in m_samePoints[b])
-                    //        if ((m_connectedPoints.ContainsKey(samePointAsB) && m_connectedPoints[samePointAsB].Contains(a)) || (m_connectedPoints.ContainsKey(a) && m_connectedPoints[a].Contains(samePointAsB)))
-                    //            return true;
-                    //}
-
-                    return false;
-                }
-
-                public HashSet<int> GetDirectlyConnectedPoints(int id)
-                {
-                    if (!m_connectedPoints.ContainsKey(id))
-                        return null;
-
-                    return m_connectedPoints[id];
-                }
-
-                public HashSet<int> GetColocatedPoints(int id)
-                {
-                    if (!m_samePoints.ContainsKey(id))
-                        return null;
-
-                    return m_samePoints[id];
-                }
-
-                public int PointCount
-                {
-                    get
-                    {
-                        return m_pointsByID.Count;
-                    }
-                }
-
-                public IEnumerable<Point> Points
-                {
-                    get
-                    {
-                        foreach (KeyValuePair<int, Point> kvp in m_pointsByID)
-                            yield return kvp.Value;
-                    }
-                }
-
-                public int EdgeCount
-                {
-                    get
-                    {
-                        return m_edges.Count;
-                    }
-                }
-
-                public IEnumerable<Edge> Edges
-                {
-                    get
-                    {
-                        foreach (Edge edge in m_edges)
-                            yield return edge;
-                    }
-                }
-
-                public int TriangleCount
-                {
-                    get
-                    {
-                        return m_triangles.Count;
-                    }
-                }
-
-                public IEnumerable<Triangle> Triangles
-                {
-                    get
-                    {
-                        foreach (Triangle triangle in m_triangles)
-                            yield return triangle;
-                    }
-                }
-
-                public int FaceCount
-                {
-                    get
-                    {
-                        return m_faces.Count;
-                    }
-                }
-
-                public IEnumerable<Face> Faces
-                {
-                    get
-                    {
-                        foreach (Face face in m_faces)
-                            yield return face;
-                    }
-                }
-                public IEnumerable<Edge> GetEdgesContaining(int id)
-                {
-                    if (!m_edgesByID.ContainsKey(id))
-                        yield break;
-
-                    foreach (Edge edge in m_edgesByID[id])
-                        yield return edge;
-                }
-
-                public IEnumerable<Edge> GetEdgesContaining(Point point)
-                {
-                    return GetEdgesContaining(point.ID);
-                }
-
-                public Edge GetEdge(int a, int b)
-                {
-                    foreach (Edge edge in GetEdgesContaining(a))
-                        if (edge.Contains(b))
-                            return edge;
-
-                    return null;
-                }
-
-
-                public void RemoveEdge(Edge edge)
-                {
-                    m_edges.Remove(edge);
-                }
-
-                public bool HasEdge(Edge edge)
-                {
-                    return m_edges.Contains(edge);
-                }
-
-                public void AddTriangle(Triangle triangle)
-                {
-                    if (triangle.ID == -1)
-                        triangle.SetID(m_highestTriangleIndex++);
-
-                    m_triangles.Add(triangle);
-
-                    foreach (Point point in triangle.Points)
-                    {
-                        if (!m_trianglesByID.ContainsKey(point.ID))
-                            m_trianglesByID.Add(point.ID, new HashSet<Triangle>());
-
-                        m_trianglesByID[point.ID].Add(triangle);
-                    }
-
-                    foreach (Edge edge in triangle.Edges)
-                    {
-                        AddEdge(edge);
-                    }
-                }
-
-                public IEnumerable<Triangle> GetTrianglesContaining(Point point)
-                {
-                    foreach (Triangle triangle in m_trianglesByID[point.ID])
-                        yield return triangle;
-                }
-
-                public void RemoveTriangle(Triangle triangle)
-                {
-                    m_triangles.Remove(triangle);
-                }
-
-                public bool HasTriangle(Triangle triangle)
-                {
-                    return m_triangles.Contains(triangle);
-                }
-
-                public void AddFace(Face face)
-                {
-                    m_faces.Add(face);
-                }
-
-                public void RemoveFace(Face face)
-                {
-                    m_faces.Remove(face);
-                }
-
-                public bool HasFace(Face face)
-                {
-                    return m_faces.Contains(face);
-                }
-
-                /// <summary>
-                /// Returns whether there are any triangles in the morph with the given edge.
-                /// </summary>
-                public bool IsEdgeInTriangle(Edge edge)
-                {
-                    return m_trianglesByID.ContainsKey(edge.A.ID) || m_trianglesByID.ContainsKey(edge.B.ID);
-                }
-
-                public void AddPoint(Point point)
-                {
-                    if (point.ID == -1)
-                        point.SetID(m_highestPointIndex);
-
-                    if (!m_pointsByID.ContainsKey(point.ID))
-                    {
-                        ++m_highestPointIndex;
-
-                        m_pointsByID.Add(point.ID, point);
-                    }
-
-                    int locationID = point.GetLocationID();
-
-                    if (!m_pointsByLocation.ContainsKey(locationID))
-                        m_pointsByLocation.Add(locationID, new HashSet<Point>());
-
-                    m_pointsByLocation[locationID].Add(point);
-
-                    // make a note of any points which share a vertex (for pathing)
-                    ConnectPointsInSameLocation(point);
-                }
-
-
-                public void RemovePoint(Point point)
-                {
-                    m_pointsByID.Remove(point.ID);
-                }
-
-                public bool HasPoint(Point point)
-                {
-                    return HasPoint(point.ID);
-                }
-
-                public bool HasPoint(int id)
-                {
-                    return m_pointsByID.ContainsKey(id);
-                }
-
-                public Point GetPoint(int id)
-                {
-                    if (!m_pointsByID.ContainsKey(id))
-                        return null;
-
-                    return m_pointsByID[id];
-                }
-
-
-                /// <summary>
-                /// This method needs to be called whenever a point moves in the mesh.
-                /// 
-                /// TODO: PROBABLY DELETE OR HUGELY OPTIMIZE- Possibly by dirtying points when moved
-                /// and then only moving the dirty ones in this method
-                /// TODO: This needs to be called whenever a point position is changed
-                /// </summary>
-                //public void RegeneratePointByLocationLookup()
-                //{
-                //    List<Point> points = new List<Point>(m_pointsByLocation.Count);
-
-                //    foreach (KeyValuePair<int, HashSet<Point>> kvp in m_pointsByLocation)
-                //        foreach (Point point in kvp.Value)
-                //            points.Add(point);
-
-                //    m_pointsByLocation.Clear();
-
-                //    foreach (Point point in points)
-                //        AddPoint(point);
-                //}
-
-                /// <summary>
-                /// If we already have a point object in the exact same location as the given point object,
-                /// return it. Else return the given point back.
-                /// 
-                /// If the given point has data such as UV, Tangent, or Normal, you can optionally make the returned point
-                /// (if it already existed after all) copy this data onto itself. This defaults to true.
-                /// </summary>
-                public void ConnectPointsInSameLocation(Point point)
-                {
-                    int locationID = point.GetLocationID();
-
-                    if (!m_pointsByLocation.TryGetValue(locationID, out HashSet<Point> pointsAtSameLocation) || pointsAtSameLocation.IsNullOrEmpty())
-                        return;
-
-                    foreach (Point existing in pointsAtSameLocation)
-                    {
-                        if (existing.ID == point.ID || m_connectedPoints[existing.ID].Contains(point.ID))
-                            continue;
-
-                        AddConnection(existing, point, isSamePoint: true);
-                    }
-                }
-
-                /// <summary>
-                /// If we already have a point object in the exact same location as the given vector,
-                /// return it. Else return the given point back.
-                /// </summary>
-                public Point GetExistingPointInSameLocation(Vector3 vec)
-                {
-                    int locationID = vec.HashVector3();
-
-                    // points already exist at given location. return one arbitrarily.
-                    if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
-                        return m_pointsByLocation[locationID].First();
-
-                    // point is at a new location so it's ok to use
-                    return vec.ToPoint();
                 }
             }
 
-            #endregion
-        }
+            public IEnumerable<int> ConnectedPoints(int id)
+            {
+                if (!m_connectedPoints.ContainsKey(id))
+                    yield break;
 
-        public static partial class Graph
-        {
-            #region Helper
+                foreach (int connected in m_connectedPoints[id])
+                    yield return connected;
+            }
 
             /// <summary>
-            /// Convert a Vector3 instance to a point.
-            /// 
-            /// Remember that calling this on identical vectors will yield different point
-            /// instances. If you want these points to be treated as distinct by the Morph,
-            /// that's fine. If you want the Morph to collapse multiple instances of the given Vector3
-            /// into one point, then you should cache a reference to the instance produced by this method
-            /// for re-use.
+            /// Returns whether the two points with the given IDs exist and either both map to the same point,
+            /// or are connected by one edge.
             /// </summary>
-            public static Morph.Point ToPoint(this Vector3 vec)
+            public bool IsDirectlyConnected(int a, int b)
             {
-                return new Morph.Point(vec);
+                if ((m_connectedPoints.ContainsKey(a) && m_connectedPoints[a].Contains(b)) || (m_connectedPoints.ContainsKey(b) && m_connectedPoints[b].Contains(a)))
+                    return true;
+
+                return false;
             }
 
-            #endregion
+            public HashSet<int> GetDirectlyConnectedPoints(int id)
+            {
+                if (!m_connectedPoints.ContainsKey(id))
+                    return null;
+
+                return m_connectedPoints[id];
+            }
+
+            public HashSet<int> GetColocatedPoints(int id)
+            {
+                if (!m_samePoints.ContainsKey(id))
+                    return null;
+
+                return m_samePoints[id];
+            }
+
+            public int PointCount
+            {
+                get
+                {
+                    return m_pointsByID.Count;
+                }
+            }
+
+            public IEnumerable<Point> Points
+            {
+                get
+                {
+                    foreach (KeyValuePair<int, Point> kvp in m_pointsByID)
+                        yield return kvp.Value;
+                }
+            }
+
+            public int EdgeCount
+            {
+                get
+                {
+                    return m_edges.Count;
+                }
+            }
+
+            public IEnumerable<Edge> Edges
+            {
+                get
+                {
+                    foreach (Edge edge in m_edges)
+                        yield return edge;
+                }
+            }
+
+            public int TriangleCount
+            {
+                get
+                {
+                    return m_triangles.Count;
+                }
+            }
+
+            public IEnumerable<Triangle> Triangles
+            {
+                get
+                {
+                    foreach (Triangle triangle in m_triangles)
+                        yield return triangle;
+                }
+            }
+
+            public int FaceCount
+            {
+                get
+                {
+                    return m_facesByID.Count;
+                }
+            }
+
+            public IEnumerable<Face> Faces
+            {
+                get
+                {
+                    foreach (KeyValuePair<int, Face> kvp in m_facesByID)
+                        yield return kvp.Value;
+                }
+            }
+
+            public IEnumerable<Edge> GetEdgesContaining(int id)
+            {
+                if (!m_edgesByPointID.ContainsKey(id))
+                    yield break;
+
+                foreach (Edge edge in m_edgesByPointID[id])
+                    yield return edge;
+            }
+
+            public IEnumerable<Edge> GetEdgesContaining(Point point)
+            {
+                return GetEdgesContaining(point.ID);
+            }
+
+            public Edge GetEdge(int a, int b)
+            {
+                foreach (Edge edge in GetEdgesContaining(a))
+                    if (edge.Contains(b))
+                        return edge;
+
+                return null;
+            }
+
+            public void RemoveEdge(Edge edge)
+            {
+                m_edges.Remove(edge);
+
+                if (m_connectedPoints.ContainsKey(edge.A.ID))
+                    m_connectedPoints[edge.A.ID].Remove(edge.B.ID);
+                
+                if (m_connectedPoints.ContainsKey(edge.B.ID))
+                    m_connectedPoints[edge.B.ID].Remove(edge.A.ID);
+            }
+
+            public bool HasEdge(Edge edge)
+            {
+                return m_edges.Contains(edge);
+            }
+
+            public void AddTriangle(Triangle triangle)
+            {
+                if (triangle.ID == -1)
+                    triangle.SetID(m_highestTriangleIndex++);
+
+                m_triangles.Add(triangle);
+
+                foreach (Point point in triangle.Points)
+                {
+                    if (!m_trianglesByPointID.ContainsKey(point.ID))
+                        m_trianglesByPointID.Add(point.ID, new HashSet<Triangle>());
+
+                    m_trianglesByPointID[point.ID].Add(triangle);
+                }
+
+                foreach (Edge edge in triangle.Edges)
+                {
+                    AddEdge(edge);
+                }
+            }
+
+            public IEnumerable<Triangle> GetTrianglesContaining(Point point)
+            {
+                foreach (Triangle triangle in m_trianglesByPointID[point.ID])
+                    yield return triangle;
+            }
+
+            public void RemoveTriangle(Triangle triangle)
+            {
+                m_triangles.Remove(triangle);
+
+                foreach (Point point in triangle.Points)
+                    m_trianglesByPointID[point.ID].Remove(triangle);
+
+                foreach (Edge edge in triangle.Edges)
+                    RemoveEdge(edge);
+
+                foreach (Point point in triangle.Points)
+                    RemovePoint(point);
+            }
+
+            public bool HasTriangle(Triangle triangle)
+            {
+                return m_triangles.Contains(triangle);
+            }
+
+            public void AddFace(Face face)
+            {
+                if (face.ID == -1)
+                    face.SetID(m_highestFaceIndex++);
+
+                m_facesByID.Add(face.ID, face);
+            }
+
+            public void RemoveFace(Face face)
+            {
+                RemoveFace(face.ID);
+            }
+
+            public void RemoveFace(int faceId)
+            {
+                if (!m_facesByID.TryGetValue(faceId, out Face face))
+                    return;
+                
+                m_facesByID.Remove(faceId);
+
+                foreach (Triangle triangle in face.Triangles)
+                    RemoveTriangle(triangle);
+            }
+
+            public bool HasFace(Face face)
+            {
+                return m_facesByID.ContainsKey(face.ID);
+            }
+
+            /// <summary>
+            /// Get the face by the given face ID, if it exists.
+            /// </summary>
+            public Face GetFace(int id)
+            {
+                if (m_facesByID.TryGetValue(id, out Face face))
+                    return face;
+
+                return null;
+            }
+
+            /// <summary>
+            /// Returns whether there are any triangles in the morph with the given edge.
+            /// </summary>
+            public bool IsEdgeInTriangle(Edge edge)
+            {
+                return m_trianglesByPointID.ContainsKey(edge.A.ID) || m_trianglesByPointID.ContainsKey(edge.B.ID);
+            }
+
+            public void AddPoint(Point point)
+            {
+                if (point.ID == -1)
+                    point.SetID(m_highestPointIndex);
+
+                if (!m_pointsByID.ContainsKey(point.ID))
+                {
+                    ++m_highestPointIndex;
+
+                    m_pointsByID.Add(point.ID, point);
+                }
+
+                int locationID = point.GetLocationID();
+
+                if (!m_pointsByLocation.ContainsKey(locationID))
+                    m_pointsByLocation.Add(locationID, new HashSet<Point>());
+
+                m_pointsByLocation[locationID].Add(point);
+
+                // make a note of any points which share a vertex (for pathing)
+                ConnectPointsInSameLocation(point);
+            }
+
+            public void RemovePoint(int id)
+            {
+                if (!m_pointsByID.TryGetValue(id, out Point point))
+                    return;
+                
+                m_pointsByID.Remove(id);
+
+                m_pointsByLocation[point.GetLocationID()].Remove(point);
+
+                if (m_connectedPoints.ContainsKey(id))
+                {
+                    foreach (int connectedPoint in m_connectedPoints[id].ToList())
+                        m_connectedPoints[connectedPoint].Remove(id);
+
+                    m_connectedPoints.Remove(id);
+                }
+                
+                if (m_samePoints.ContainsKey(id))
+                {
+                    foreach (int samePoint in m_samePoints[id].ToList())
+                        m_samePoints[samePoint].Remove(id);
+
+                    m_samePoints.Remove(id);
+                }
+                
+                foreach (Edge edge in m_edgesByPointID[id].ToList())
+                    RemoveEdge(edge);
+
+                m_edgesByPointID.Remove(id);
+
+                foreach (Triangle triangle in m_trianglesByPointID[id].ToList())
+                    RemoveTriangle(triangle);
+
+                m_trianglesByPointID.Remove(id);
+
+            }
+
+            public void RemovePoint(Point point)
+            {
+                RemovePoint(point.ID);
+            }
+
+            public bool HasPoint(Point point)
+            {
+                return HasPoint(point.ID);
+            }
+
+            public bool HasPoint(int id)
+            {
+                return m_pointsByID.ContainsKey(id);
+            }
+
+            public Point GetPoint(int id)
+            {
+                if (!m_pointsByID.ContainsKey(id))
+                    return null;
+
+                return m_pointsByID[id];
+            }
+
+
+            /// <summary>
+            /// This method needs to be called whenever a point moves in the mesh.
+            /// 
+            /// TODO: PROBABLY DELETE OR HUGELY OPTIMIZE- Possibly by dirtying points when moved
+            /// and then only moving the dirty ones in this method
+            /// TODO: This needs to be called whenever a point position is changed
+            /// </summary>
+            //public void RegeneratePointByLocationLookup()
+            //{
+            //    List<Point> points = new List<Point>(m_pointsByLocation.Count);
+
+            //    foreach (KeyValuePair<int, HashSet<Point>> kvp in m_pointsByLocation)
+            //        foreach (Point point in kvp.Value)
+            //            points.Add(point);
+
+            //    m_pointsByLocation.Clear();
+
+            //    foreach (Point point in points)
+            //        AddPoint(point);
+            //}
+
+            /// <summary>
+            /// If we already have a point object in the exact same location as the given point object,
+            /// return it. Else return the given point back.
+            /// 
+            /// If the given point has data such as UV, Tangent, or Normal, you can optionally make the returned point
+            /// (if it already existed after all) copy this data onto itself. This defaults to true.
+            /// </summary>
+            public void ConnectPointsInSameLocation(Point point)
+            {
+                int locationID = point.GetLocationID();
+
+                if (!m_pointsByLocation.TryGetValue(locationID, out HashSet<Point> pointsAtSameLocation) || pointsAtSameLocation.IsNullOrEmpty())
+                    return;
+
+                foreach (Point existing in pointsAtSameLocation)
+                {
+                    if (existing.ID == point.ID || m_connectedPoints[existing.ID].Contains(point.ID))
+                        continue;
+
+                    AddConnection(existing, point, isSamePoint: true);
+                }
+            }
+
+            /// <summary>
+            /// If we already have a point object in the exact same location as the given vector,
+            /// return it. Else return the given point back.
+            /// </summary>
+            public Point GetExistingPointInSameLocation(Vector3 vec)
+            {
+                int locationID = vec.HashVector3();
+
+                // points already exist at given location. return one arbitrarily.
+                if (m_pointsByLocation.ContainsKey(locationID) && !m_pointsByLocation[locationID].IsNullOrEmpty())
+                    return m_pointsByLocation[locationID].First();
+
+                // point is at a new location so it's ok to use
+                return vec.ToPoint();
+            }
+
+            /// <summary>
+            /// For when a point changes location, switches its key in the dictionary.
+            /// </summary>
+            public void RelocatePoint(Point point, int oldHash)
+            {
+                int currentHash = point.GetLocationID();
+                m_pointsByLocation[oldHash].Remove(point);
+
+                if (!m_pointsByLocation.ContainsKey(currentHash))
+                    m_pointsByLocation.Add(currentHash, new HashSet<Point>());
+
+                m_pointsByLocation[currentHash].Add(point);
+            }
         }
+
+        #endregion
     }
+
+    public static partial class Graph
+    {
+        #region Helper
+
+        /// <summary>
+        /// Convert a Vector3 instance to a point.
+        /// 
+        /// Remember that calling this on identical vectors will yield different point
+        /// instances. If you want these points to be treated as distinct by the Morph,
+        /// that's fine. If you want the Morph to collapse multiple instances of the given Vector3
+        /// into one point, then you should cache a reference to the instance produced by this method
+        /// for re-use.
+        /// </summary>
+        public static Morph.Point ToPoint(this Vector3 vec)
+        {
+            return new Morph.Point(vec);
+        }
+
+        #endregion
+    }
+}

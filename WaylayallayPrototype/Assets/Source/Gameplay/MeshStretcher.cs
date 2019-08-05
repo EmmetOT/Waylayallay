@@ -214,8 +214,7 @@ public class MeshStretcher
 
         bool result = false;
 
-        Graph.Partition partition;
-        if (TryBisectTriangle(startingIndex, BisectionPlane, out partition))
+        if (TryBisectTriangle(startingIndex, BisectionPlane, out Graph.Partition partition))
         {
             Triangulator triangulator;
             bool foundSplitTriangle = false;

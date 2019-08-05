@@ -32,14 +32,17 @@ public class PointHandle : Editor
         Handles.matrix = originalHandlesMatrix;
     }
 
-    [DrawGizmo(GizmoType.Selected | GizmoType.Active)]
+    [DrawGizmo(GizmoType.Selected)]
     private static void DrawGizmos(MorphTest morphTest, GizmoType gizmoType)
     {
-        if (morphTest.PointCount == 0 || !morphTest.DrawGizmos)
+        if (!morphTest.DrawGizmos)
             return;
 
-        morphTest.Morph.DrawGizmo(morphTest.transform);
-        morphTest.Morph.DrawFaces(morphTest.transform);
+        if (morphTest.PointCount != 0)
+        {
+            morphTest.Morph.DrawGizmo(morphTest.transform);
+            morphTest.Morph.DrawFaces(morphTest.transform);
+        }
     }
 
     private static FieldInfo m_hiddenInfo;
