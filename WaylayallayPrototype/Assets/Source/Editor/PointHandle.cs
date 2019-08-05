@@ -39,6 +39,7 @@ public class PointHandle : Editor
             return;
 
         morphTest.Morph.DrawGizmo(morphTest.transform);
+        morphTest.Morph.DrawFaces(morphTest.transform);
     }
 
     private static FieldInfo m_hiddenInfo;

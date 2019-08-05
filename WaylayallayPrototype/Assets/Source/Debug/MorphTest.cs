@@ -69,22 +69,13 @@ public class MorphTest : MonoBehaviour
     {
         Reinit();
         
-        List<Morph.Point> perimeter = GetPerimeter();
-
-        foreach (Morph.Point a in m_morph.Points)
-            foreach (Morph.Point b in m_morph.Points)
-                if (m_morph.IsDirectlyConnected(a, b))
-                    Debug.Log(a.ID + " - " + b.ID);
-
-        Debug.Log("===========");
-        foreach (Morph.Point point in perimeter)
-            Debug.Log(point.ID);
+        Debug.Log("Faces: " + m_morph.Faces.Count());
     }
 
     public void Reinit()
     {
         Material[] mats = m_testMeshes[0].GetComponent<Renderer>().sharedMaterials;
-        
+
         m_morph = new Morph(m_testMeshes);
 
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
