@@ -479,8 +479,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0d09c7d6feeb92046b48ad4374f26af0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_drawOriginalMeshGizmos: 1
-  m_drawGizmos: 0
+  m_drawGizmos: 1
   m_connectedQueryOne: 0
   m_connectedQueryTwo: 0
   m_testMeshes:
