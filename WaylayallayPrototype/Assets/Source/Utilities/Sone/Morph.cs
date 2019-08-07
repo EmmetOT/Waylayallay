@@ -121,17 +121,6 @@ namespace Simplex
             return mesh;
         }
 
-        /// <summary>
-        /// Toggles whether this Morph will 'collapse colocated points' - meaing that Points in the same
-        /// position in space will get treated as single vertices of a resulting mesh. For meshes with sharp angles such as cubes,
-        /// this will likely result in weird shading because there'll only be one normal per vertex. However, the mesh will also be more compact,
-        /// and this effect is not noticable for smooth meshes such as spheres.
-        /// </summary>
-        //public void SetCollapseColocatedPoints(bool collapseColocatedPoints)
-        //{
-        //    m_collapseColocatedPoints = collapseColocatedPoints;
-        //}
-
         #region Points
 
         public IEnumerable<Point> Points
@@ -210,6 +199,7 @@ namespace Simplex
                     m_data.RelocatePoint(point, oldHash);
                 }
             }
+
         }
 
         /// <summary>
@@ -451,22 +441,6 @@ namespace Simplex
         {
             m_data.AddTriangle(triangle);
 
-            bool addedToExistingFace = false;
-            foreach (Face face in m_data.Faces)
-            {
-                if (face.TryAddTriangle(triangle))
-                {
-                    addedToExistingFace = true;
-
-                    // TODO - what if this triangle bridges 2 faces?
-                    break;
-                }
-            }
-
-            if (!addedToExistingFace)
-            {
-                m_data.AddFace(new Face(triangle, m_data));
-            }
         }
 
         /// <summary>
@@ -518,7 +492,7 @@ namespace Simplex
 
             if (face == null)
                 return false;
-            
+
             if (!face.Retriangulate(out List<Point> points))
                 return false;
 
@@ -573,8 +547,13 @@ namespace Simplex
             foreach (Face face in m_data.Faces)
             {
                 int hash = face.GetHashCode();
+                int colourHex = Mathf.Abs(hash) % 0xFFFFFF;
 
-                Color col = new Color((Mathf.Abs(hash) % 255f) / 255f, (Mathf.Abs(hash * 3f) % 255f) / 255f, (Mathf.Abs(hash * 5f) % 255f) / 255f, 0.3f);
+                float b = colourHex % 0x100 / 255f;
+                float g = ((colourHex % 0x10000) - b) / 0x100 / 255f;
+                float r = ((colourHex % 0x1000000) - g) / 0x10000 / 255f;
+
+                Color col = new Color(r, g, b, 0.3f);
 
                 face.DrawGizmo(col, transform, label);
             }
@@ -872,7 +851,7 @@ namespace Simplex
 
                 Gizmos.color = edgeCol;
                 Gizmos.DrawLine(A.LocalPosition, B.LocalPosition);
-                
+
                 Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
             }
@@ -1050,6 +1029,14 @@ namespace Simplex
             }
 
             /// <summary>
+            /// Returns true if the this triangle has the same normal as the given vector (assumed normalized).
+            /// </summary>
+            public bool IsConormal(Vector3 normal)
+            {
+                return Normal == normal;
+            }
+
+            /// <summary>
             /// Reverse the normal of this triangle.
             /// </summary>
             public void Flip()
@@ -1106,6 +1093,14 @@ namespace Simplex
 
             public int ID { get; private set; } = -1;
 
+            public int TriangleCount
+            {
+                get
+                {
+                    return m_triangles.Count;
+                }
+            }
+
             public IEnumerable<Triangle> Triangles
             {
                 get
@@ -1148,6 +1143,22 @@ namespace Simplex
             }
 
             /// <summary>
+            /// Returns whether this face includes the given triangle.
+            /// </summary>
+            public bool Contains(Triangle triangle)
+            {
+                return m_triangles.Contains(triangle);
+            }
+
+            /// <summary>
+            /// Remove the given triangle from this face, if it's in it.
+            /// </summary>
+            public void RemoveTriangle(Triangle triangle)
+            {
+                m_triangles.Remove(triangle);
+            }
+
+            /// <summary>
             /// If this triangle does not already belong to this face, and belongs as part of it (shares a normal with all triangles in the mesh
             /// and an edge with at least one), then add it and return true. Else return false.
             /// </summary>
@@ -1164,6 +1175,21 @@ namespace Simplex
                         }
                     }
                 }
+
+                return false;
+            }
+
+            /// <summary>
+            /// Returns true if the given triangle belongs to this face.
+            /// </summary>
+            public bool IsSameFace(Triangle triangle)
+            {
+                if (!IsConormal(triangle))
+                    return false;
+
+                foreach (Triangle existingTriangle in m_triangles)
+                    if (triangle.IsContiguous(triangle))
+                        return true;
 
                 return false;
             }
@@ -1388,7 +1414,7 @@ namespace Simplex
                 {
                     result.Add(perimeter[triangulation[i]]);
                 }
-                
+
                 return true;
             }
 
@@ -1467,9 +1493,11 @@ namespace Simplex
         public class Data
         {
             private Dictionary<int, Point> m_pointsByID = new Dictionary<int, Point>();
+            private Dictionary<int, Face> m_facesByID = new Dictionary<int, Face>();
+
             private Dictionary<int, HashSet<Edge>> m_edgesByPointID = new Dictionary<int, HashSet<Edge>>();
             private Dictionary<int, HashSet<Triangle>> m_trianglesByPointID = new Dictionary<int, HashSet<Triangle>>();
-            private Dictionary<int, Face> m_facesByID = new Dictionary<int, Face>();
+            private Dictionary<int, HashSet<Face>> m_facesByPointID = new Dictionary<int, HashSet<Face>>();
 
             private HashSet<Edge> m_edges = new HashSet<Edge>();
             private HashSet<Triangle> m_triangles = new HashSet<Triangle>();
@@ -1768,7 +1796,7 @@ namespace Simplex
 
                 if (m_connectedPoints.ContainsKey(edge.A.ID))
                     m_connectedPoints[edge.A.ID].Remove(edge.B.ID);
-                
+
                 if (m_connectedPoints.ContainsKey(edge.B.ID))
                     m_connectedPoints[edge.B.ID].Remove(edge.A.ID);
             }
@@ -1796,6 +1824,31 @@ namespace Simplex
                 foreach (Edge edge in triangle.Edges)
                 {
                     AddEdge(edge);
+                }
+
+                ConnectTriangleWithFace(triangle);
+            }
+
+            /// <summary>
+            /// Attempt to merge the triangle with whichever face it belongs to.
+            /// </summary>
+            private void ConnectTriangleWithFace(Triangle triangle)
+            {
+                bool addedToExistingFace = false;
+                foreach (Face face in Faces)
+                {
+                    if (face.TryAddTriangle(triangle))
+                    {
+                        addedToExistingFace = true;
+
+                        // TODO - what if this triangle bridges 2 faces?
+                        break;
+                    }
+                }
+
+                if (!addedToExistingFace)
+                {
+                    AddFace(new Face(triangle, this));
                 }
             }
 
@@ -1830,6 +1883,17 @@ namespace Simplex
                     face.SetID(m_highestFaceIndex++);
 
                 m_facesByID.Add(face.ID, face);
+
+                foreach (Triangle triangle in face.Triangles)
+                {
+                    foreach (Point point in triangle.Points)
+                    {
+                        if (!m_facesByPointID.TryGetValue(point.ID, out HashSet<Face> faces))
+                            m_facesByPointID.Add(point.ID, new HashSet<Face>() { face });
+                        else
+                            faces.Add(face);
+                    }
+                }
             }
 
             public void RemoveFace(Face face)
@@ -1841,11 +1905,19 @@ namespace Simplex
             {
                 if (!m_facesByID.TryGetValue(faceId, out Face face))
                     return;
-                
+
                 m_facesByID.Remove(faceId);
 
                 foreach (Triangle triangle in face.Triangles)
+                {
                     RemoveTriangle(triangle);
+
+                    foreach (Point point in triangle.Points)
+                    {
+                        if (m_facesByPointID.ContainsKey(point.ID))
+                            m_facesByPointID.Remove(point.ID);
+                    }
+                }
             }
 
             public bool HasFace(Face face)
@@ -1862,6 +1934,16 @@ namespace Simplex
                     return face;
 
                 return null;
+            }
+
+            /// <summary>
+            /// Get the face by the given face ID, if it exists.
+            /// </summary>
+            public IEnumerable<Face> GetFacesByPointID(int id)
+            {
+                if (m_facesByPointID.TryGetValue(id, out HashSet<Face> faces))
+                    foreach (Face face in faces)
+                        yield return face;
             }
 
             /// <summary>
@@ -1886,10 +1968,10 @@ namespace Simplex
 
                 int locationID = point.GetLocationID();
 
-                if (!m_pointsByLocation.ContainsKey(locationID))
-                    m_pointsByLocation.Add(locationID, new HashSet<Point>());
-
-                m_pointsByLocation[locationID].Add(point);
+                if (!m_pointsByLocation.TryGetValue(locationID, out HashSet<Point> points))
+                    m_pointsByLocation.Add(locationID, new HashSet<Point>() { point });
+                else
+                    points.Add(point);
 
                 // make a note of any points which share a vertex (for pathing)
                 ConnectPointsInSameLocation(point);
@@ -1899,7 +1981,7 @@ namespace Simplex
             {
                 if (!m_pointsByID.TryGetValue(id, out Point point))
                     return;
-                
+
                 m_pointsByID.Remove(id);
 
                 m_pointsByLocation[point.GetLocationID()].Remove(point);
@@ -1911,7 +1993,7 @@ namespace Simplex
 
                     m_connectedPoints.Remove(id);
                 }
-                
+
                 if (m_samePoints.ContainsKey(id))
                 {
                     foreach (int samePoint in m_samePoints[id].ToList())
@@ -1919,7 +2001,7 @@ namespace Simplex
 
                     m_samePoints.Remove(id);
                 }
-                
+
                 foreach (Edge edge in m_edgesByPointID[id].ToList())
                     RemoveEdge(edge);
 
@@ -1930,6 +2012,8 @@ namespace Simplex
 
                 m_trianglesByPointID.Remove(id);
 
+                if (m_facesByPointID.ContainsKey(id))
+                    m_facesByPointID.Remove(id);
             }
 
             public void RemovePoint(Point point)
@@ -1954,28 +2038,6 @@ namespace Simplex
 
                 return m_pointsByID[id];
             }
-
-
-            /// <summary>
-            /// This method needs to be called whenever a point moves in the mesh.
-            /// 
-            /// TODO: PROBABLY DELETE OR HUGELY OPTIMIZE- Possibly by dirtying points when moved
-            /// and then only moving the dirty ones in this method
-            /// TODO: This needs to be called whenever a point position is changed
-            /// </summary>
-            //public void RegeneratePointByLocationLookup()
-            //{
-            //    List<Point> points = new List<Point>(m_pointsByLocation.Count);
-
-            //    foreach (KeyValuePair<int, HashSet<Point>> kvp in m_pointsByLocation)
-            //        foreach (Point point in kvp.Value)
-            //            points.Add(point);
-
-            //    m_pointsByLocation.Clear();
-
-            //    foreach (Point point in points)
-            //        AddPoint(point);
-            //}
 
             /// <summary>
             /// If we already have a point object in the exact same location as the given point object,
@@ -2024,10 +2086,28 @@ namespace Simplex
                 int currentHash = point.GetLocationID();
                 m_pointsByLocation[oldHash].Remove(point);
 
-                if (!m_pointsByLocation.ContainsKey(currentHash))
-                    m_pointsByLocation.Add(currentHash, new HashSet<Point>());
-
-                m_pointsByLocation[currentHash].Add(point);
+                if (!m_pointsByLocation.TryGetValue(currentHash, out HashSet<Point> points))
+                    m_pointsByLocation.Add(currentHash, new HashSet<Point>() { point });
+                else
+                    points.Add(point);
+                
+                // since a point has moved, it may no longer be part of a certain face.
+                // we need to re-evaluate the faces which own the triangles to which this point belongs!
+                if (m_trianglesByPointID.TryGetValue(point.ID, out HashSet<Triangle> triangles))
+                {
+                    foreach (Triangle triangle in triangles)
+                    {
+                        // todo - improve this
+                        foreach (Face face in m_facesByID.Values.ToList())
+                        {
+                            if (face.Contains(triangle) && face.TriangleCount > 1 && !face.IsSameFace(triangle))
+                            {
+                                face.RemoveTriangle(triangle);
+                                ConnectTriangleWithFace(triangle);
+                            }
+                        }
+                    }
+                }
             }
         }
 

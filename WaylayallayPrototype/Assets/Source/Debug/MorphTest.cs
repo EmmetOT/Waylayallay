@@ -4,6 +4,7 @@ using UnityEngine;
 using Simplex;
 using NaughtyAttributes;
 using UnityEditor;
+using System;
 
 public class MorphTest : MonoBehaviour
 {
@@ -62,10 +63,7 @@ public class MorphTest : MonoBehaviour
     public Morph Morph { get { return m_morph; } }
 
     private bool m_initialized = false;
-
-    [SerializeField]
-    private bool m_drawOriginalMeshGizmos = false;
-
+    
     [SerializeField]
     private bool m_drawGizmos = false;
     public bool DrawGizmos { get { return m_drawGizmos; } }
@@ -117,33 +115,5 @@ public class MorphTest : MonoBehaviour
                 m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
             }
         }
-    }
-
-    [Button]
-    public void CreateMorphFromMesh()
-    {
-        Reinit();
-    }
-
-    [Button]
-    private void CheckIfConnected()
-    {
-        if (m_connectedQueryOne > m_morph.PointCount || m_connectedQueryTwo > m_morph.PointCount)
-            return;
-
-        if (m_morph.HasPath(m_connectedQueryOne, m_connectedQueryTwo))
-            Debug.Log("Connected!");
-        else
-            Debug.Log("Not Connected!");
-    }
-
-    [Button]
-    private void Flip()
-    {
-        if (m_morph == null)
-            Reinit();
-
-        m_morph.FlipNormals();
-        m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
     }
 }

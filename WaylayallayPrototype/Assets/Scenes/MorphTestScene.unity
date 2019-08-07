@@ -480,7 +480,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_drawOriginalMeshGizmos: 1
-  m_drawGizmos: 1
+  m_drawGizmos: 0
   m_connectedQueryOne: 0
   m_connectedQueryTwo: 0
   m_testMeshes:
