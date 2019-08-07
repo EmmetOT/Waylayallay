@@ -492,8 +492,7 @@ MonoBehaviour:
   - {fileID: 1960039188}
   - {fileID: 224350838}
   - {fileID: 1045843657}
-  m_resultMeshFilter: {fileID: 0}
-  m_testTransform: {fileID: 244657875}
+  m_resultMeshFilter: {fileID: 424769081}
 --- !u!1 &725743827
 GameObject:
   m_ObjectHideFlags: 0

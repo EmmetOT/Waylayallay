@@ -26,6 +26,15 @@ public class MorphTest : MonoBehaviour
         }
     }
 
+    public IEnumerable<Morph.Point> Points
+    {
+        get
+        {
+            foreach (Morph.Point point in m_morph.Points)
+                yield return point;
+        }
+    }
+
     public Vector3 GetPoint(int i)
     {
         Morph.Point point = m_morph.GetPoint(i);
@@ -35,6 +44,14 @@ public class MorphTest : MonoBehaviour
     public void SetPoint(int i, Vector3 vec)
     {
         m_morph.SetPoint(i, vec);
+        m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
+
+        m_resultMeshFilter.sharedMesh.RecalculateNormals();
+    }
+
+    public void SetPoint(Morph.Point point, Vector3 vec)
+    {
+        m_morph.SetPoint(point, vec);
         m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
 
         m_resultMeshFilter.sharedMesh.RecalculateNormals();
@@ -94,9 +111,9 @@ public class MorphTest : MonoBehaviour
             if (m_morph != null)
             {
                 m_morph.TryRetriangulateFace(0);
-                m_morph.TryRetriangulateFace(1);
-                m_morph.TryRetriangulateFace(2);
-                m_morph.TryRetriangulateFace(3);
+                //m_morph.TryRetriangulateFace(1);
+                //m_morph.TryRetriangulateFace(2);
+                //m_morph.TryRetriangulateFace(3);
                 m_resultMeshFilter.sharedMesh = m_morph.ToMesh();
             }
         }

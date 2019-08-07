@@ -185,13 +185,21 @@ namespace Simplex
             if (point == null)
                 return;
 
+            SetPoint(point, localPosition);
+        }
+
+        /// <summary>
+        /// Set the given point to the given position, as well as all attached points.
+        /// </summary>
+        public void SetPoint(Point point, Vector3 localPosition)
+        {
             int oldHash = point.GetLocationID();
 
             point.LocalPosition = localPosition;
 
             m_data.RelocatePoint(point, oldHash);
 
-            HashSet<int> colocated = m_data.GetColocatedPoints(pointIndex);
+            HashSet<int> colocated = m_data.GetColocatedPoints(point.ID);
 
             if (colocated != null)
             {
@@ -202,14 +210,6 @@ namespace Simplex
                     m_data.RelocatePoint(point, oldHash);
                 }
             }
-        }
-
-        /// <summary>
-        /// Set the given point to the given position, as well as all attached points.
-        /// </summary>
-        public void SetPoint(Point point, Vector3 localPosition)
-        {
-            SetPoint(point.ID, localPosition);
         }
 
         /// <summary>
@@ -556,7 +556,19 @@ namespace Simplex
             //        edge.DrawGizmo(Color.red, transform: transform);
         }
 
-        public void DrawFaces(Transform transform = null)
+        public void DrawPoints(Transform transform = null)
+        {
+            foreach (Point point in m_data.Points)
+                point.DrawPointLabels(Color.black, transform);
+        }
+
+        public void DrawTriangles(Transform transform = null, bool label = false)
+        {
+            foreach (Triangle triangle in m_data.Triangles)
+                triangle.DrawGizmo(Color.black, Color.black, Color.blue, transform: transform, label: label);
+        }
+
+        public void DrawFaces(Transform transform = null, bool label = false)
         {
             foreach (Face face in m_data.Faces)
             {
@@ -564,7 +576,7 @@ namespace Simplex
 
                 Color col = new Color((Mathf.Abs(hash) % 255f) / 255f, (Mathf.Abs(hash * 3f) % 255f) / 255f, (Mathf.Abs(hash * 5f) % 255f) / 255f, 0.3f);
 
-                face.DrawGizmo(col, transform);
+                face.DrawGizmo(col, transform, label);
             }
         }
 #endif
@@ -714,8 +726,8 @@ namespace Simplex
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
 
                 GUIStyle handleStyle = new GUIStyle();
-                handleStyle.normal.textColor = Color.black;
-                handleStyle.fontSize = 10;
+                handleStyle.normal.textColor = Color.red;
+                handleStyle.fontSize = 9;
 
                 Handles.Label(LocalPosition + Normal * 0.15f + new Vector3(0f, ID * 0.01f, 0f), ID.ToString(), handleStyle);
 
@@ -860,10 +872,7 @@ namespace Simplex
 
                 Gizmos.color = edgeCol;
                 Gizmos.DrawLine(A.LocalPosition, B.LocalPosition);
-
-                A.DrawPointGizmo(pointCol, radius, transform);
-                B.DrawPointGizmo(pointCol, radius, transform);
-
+                
                 Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
             }
@@ -1070,9 +1079,9 @@ namespace Simplex
 
                 GUIStyle handleStyle = new GUIStyle();
                 handleStyle.normal.textColor = Color.black;
-                handleStyle.fontSize = 20;
+                handleStyle.fontSize = 13;
 
-                Handles.Label(Centroid + Normal * 0.15f, ID.ToString(), handleStyle);
+                Handles.Label(Centroid + Normal * 0.05f, ID.ToString(), handleStyle);
 
                 Gizmos.matrix = originalGizmoMatrix;
                 Handles.matrix = originalHandleMatrix;
@@ -1111,6 +1120,23 @@ namespace Simplex
                 get
                 {
                     return m_initialTriangle.Normal;
+                }
+            }
+
+            public Vector3 Centroid
+            {
+                get
+                {
+                    Vector3 centroid = Vector3.zero;
+                    int count = 0;
+
+                    foreach (Triangle triangle in Triangles)
+                    {
+                        centroid += triangle.Centroid;
+                        count++;
+                    }
+
+                    return centroid / count;
                 }
             }
 
@@ -1404,7 +1430,7 @@ namespace Simplex
 
 
 #if UNITY_EDITOR
-            public void DrawGizmo(Color col, Transform transform = null)
+            public void DrawGizmo(Color col, Transform transform = null, bool label = false)
             {
                 Matrix4x4 originalHandleMatrix = Handles.matrix;
                 Handles.matrix = transform == null ? originalHandleMatrix : transform.localToWorldMatrix;
@@ -1418,6 +1444,12 @@ namespace Simplex
                 {
                     Handles.DrawAAConvexPolygon(triangle.ToVectorArray());
                 }
+
+                GUIStyle handleStyle = new GUIStyle();
+                handleStyle.normal.textColor = Color.black;
+                handleStyle.fontSize = 20;
+
+                Handles.Label(Centroid, ID.ToString(), handleStyle);
 
                 Handles.matrix = originalHandleMatrix;
 #endif

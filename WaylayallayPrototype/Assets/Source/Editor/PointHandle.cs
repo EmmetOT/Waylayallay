@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Simplex;
+using System;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
@@ -16,16 +17,17 @@ public class PointHandle : Editor
         Handles.color = Color.black;
         Matrix4x4 originalHandlesMatrix = Handles.matrix;
         Handles.matrix = morphTest.transform.localToWorldMatrix;
-        for (int i = 0; i < morphTest.PointCount; i++)
+
+        foreach (Morph.Point point in morphTest.Points)
         {
-            Vector3 pos = morphTest.transform.localToWorldMatrix * morphTest.GetPoint(i);
+            Vector3 pos = morphTest.transform.localToWorldMatrix * point.LocalPosition;
 
             EditorGUI.BeginChangeCheck();
             Vector3 vec = Handles.FreeMoveHandle(pos, Quaternion.identity, 0.02f, Vector3.zero, Handles.DotHandleCap);
             if (EditorGUI.EndChangeCheck())
             {
-                Undo.RecordObject(morphTest, "Changed Point " + i);
-                morphTest.SetPoint(i, vec);
+                Undo.RecordObject(morphTest, "Changed Point " + point.ID);
+                morphTest.SetPoint(point, vec);
             }
         }
 
@@ -40,8 +42,10 @@ public class PointHandle : Editor
 
         if (morphTest.PointCount != 0)
         {
-            morphTest.Morph.DrawGizmo(morphTest.transform);
-            morphTest.Morph.DrawFaces(morphTest.transform);
+            //morphTest.Morph.DrawGizmo(morphTest.transform);
+            morphTest.Morph.DrawFaces(morphTest.transform, label: true);
+            morphTest.Morph.DrawTriangles(morphTest.transform, label: true);
+            morphTest.Morph.DrawPoints(morphTest.transform);
         }
     }
 
