@@ -17,27 +17,6 @@ namespace Simplex
     [System.Serializable]
     public class Morph
     {
-
-        public void Test()
-        {
-            Debug.Log("Point Count = " + m_data.PointCount);
-            Debug.Log("Edge Count = " + m_data.EdgeCount);
-            Debug.Log("Triangle Count = " + m_data.TriangleCount);
-            Debug.Log("Face Count = " + m_data.FaceCount);
-
-            Debug.Log("Drawing Triangles...");
-
-            foreach (Triangle triangle in m_data.Triangles)
-            {
-                Debug.Log("Triangle " + triangle.ID);
-                foreach (Edge edge in triangle.Edges)
-                {
-                    Debug.Log("---> Edge " + edge.ID);
-                }
-            }
-        }
-
-
         [SerializeField]
         private Data m_data;
 
@@ -523,6 +502,22 @@ namespace Simplex
             }
         }
 
+        public int FaceCount
+        {
+            get
+            {
+                return m_data.FaceCount;
+            }
+        }
+
+        // todo - write this thing
+        public void AddFace(params Point[] points)
+        {
+            List<Triangle> newTriangles = new List<Triangle>(points.Length);
+
+            throw new System.NotImplementedException();
+        }
+        
         /// <summary>
         /// Return the face with the given ID, if it exists.
         /// </summary>

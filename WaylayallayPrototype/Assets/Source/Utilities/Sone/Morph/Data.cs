@@ -490,7 +490,7 @@ namespace Simplex
 
             if (!addedToExistingFace)
             {
-                AddFace(new Face(triangle.ID, this));
+                AddFace(new Face(this, triangle.ID));
             }
         }
 

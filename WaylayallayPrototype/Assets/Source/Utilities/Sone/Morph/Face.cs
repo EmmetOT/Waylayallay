@@ -71,8 +71,8 @@ namespace Simplex
                 return centroid / count;
             }
         }
-
-        public Face(int triangleID, Data data)
+        
+        public Face(Data data, int triangleID)
         {
             SetData(data);
             m_initialTriangleID = triangleID;
@@ -223,7 +223,7 @@ namespace Simplex
         /// <summary>
         /// Return a list of all the points in this face.
         /// </summary>
-        public List<Point> GetPoints(Matrix4x4 matrix = default)
+        public List<Point> GetPoints()
         {
             HashSet<Point> points = new HashSet<Point>();
 
@@ -353,42 +353,55 @@ namespace Simplex
             return perimeter;
         }
 
+        /// <summary>
+        /// Attempt to retriangulate this face, returns true if a better triangulation is possible,
+        /// with the out parameter being a list of points where each set of 3 points form a triangle.
+        /// </summary>
         public bool Retriangulate(out List<Point> result)
         {
-            List<Point> perimeter = GetPerimeter();
             result = null;
 
-            int triangleCount = m_triangleIDs.Count;
-            int pointCount = perimeter.Count;
-
+            List<Point> perimeter = GetPerimeter();
+            
             // can't get any better
-            if (pointCount - triangleCount == 2)
+            if (perimeter.Count - m_triangleIDs.Count == 2)
                 return false;
 
+            result = Retriangulate(GetPerimeter(), Normal);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Given a set of points which are assumed to form a closed loop, and a normal, return a
+        /// new list of points where each set of 3 points form a triangle.
+        /// </summary>
+        public static List<Point> Retriangulate(List<Point> perimeter, Vector3 normal)
+        {
+            int pointCount = perimeter.Count;
+            
             Vector2[] vecPerimeter = new Vector2[pointCount];
 
             for (int i = 0; i < pointCount; i++)
-                vecPerimeter[i] = perimeter[i].To2D(Normal);
+                vecPerimeter[i] = perimeter[i].To2D(normal);
 
             Triangulator triangulator = new Triangulator(vecPerimeter);
 
             int[] triangulation = triangulator.Triangulate();
 
-            // new triangulation is somehow worse, don't bother continuing
-            if ((triangulation.Length / 3) >= triangleCount)
-            {
-                Debug.Log((triangulation.Length / 3) + " is greater than " + triangleCount);
-                return false;
-            }
+            //// new triangulation is somehow worse, don't bother continuing
+            //if ((triangulation.Length / 3) >= triangleCount)
+            //{
+            //    Debug.Log((triangulation.Length / 3) + " is greater than " + triangleCount);
+            //    return false;
+            //}
 
-            result = new List<Point>(triangulation.Length);
+            List<Point> result = new List<Point>(triangulation.Length);
 
             for (int i = 0; i < triangulation.Length; i++)
-            {
                 result.Add(perimeter[triangulation[i]]);
-            }
 
-            return true;
+            return result;
         }
 
         public float CalculateArea(List<Point> perimeter = null)

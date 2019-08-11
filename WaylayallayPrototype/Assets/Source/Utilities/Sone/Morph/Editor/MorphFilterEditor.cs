@@ -7,8 +7,19 @@ using UnityEngine;
 [CustomEditor(typeof(MorphFilter)), CanEditMultipleObjects]
 public class MorphFilterEditor : Editor
 {
+    private bool m_isExtruding = false;
+
+    private MorphFaceExtruder m_extruder;
+
+    private float m_extrusion = 0f;
+    private int m_faceToExtrude = 0;
+
     public override void OnInspectorGUI()
     {
+        GUI.enabled = false;
+        EditorGUILayout.PropertyField(serializedObject.FindProperty("m_Script"));
+        GUI.enabled = true;
+
         MorphFilter morphFilter = (MorphFilter)target;
 
         SerializedProperty meshesProperty = serializedObject.FindProperty("m_sourceMeshFilters");
@@ -24,14 +35,36 @@ public class MorphFilterEditor : Editor
             morphFilter.GenerateMorph();
         }
 
-        if (GUILayout.Button("Regenerate"))
+        if (GUILayout.Button("Reset"))
         {
+            m_extrusion = 0f;
+            m_isExtruding = false;
+
             morphFilter.GenerateMorph();
         }
 
-        if (GUILayout.Button("Test"))
+        if (!m_isExtruding)
+            m_faceToExtrude = Mathf.Clamp(EditorGUILayout.IntField("Face To Extrude", m_faceToExtrude), 0, morphFilter.Morph.FaceCount);
+
+        if (GUILayout.Button(m_isExtruding ? "Stop Extruding" : "Extrude Face " + m_faceToExtrude))
         {
-            morphFilter.Test();
+            m_isExtruding = !m_isExtruding;
+
+            if (m_isExtruding)
+            {
+                m_extrusion = 0f;
+                m_extruder = new MorphFaceExtruder(morphFilter, m_faceToExtrude);
+            }
+            else
+            {
+                m_extruder.Dispose();
+            }
+        }
+
+        if (m_isExtruding)
+        {
+            m_extrusion = EditorGUILayout.FloatField("Extrusion", m_extrusion);
+            m_extruder.ExtrudeFace(m_extrusion);
         }
     }
 
@@ -39,7 +72,7 @@ public class MorphFilterEditor : Editor
     {
         MorphFilter morphFilter = (MorphFilter)target;
 
-        if (morphFilter == null || morphFilter.Morph == null || morphFilter.Morph.PointCount == 0)
+        if (morphFilter == null || morphFilter.Morph == null || morphFilter.Morph.PointCount == 0 || m_isExtruding)
             return;
 
         Transform morphFilterTransform = morphFilter.transform;

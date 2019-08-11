@@ -47,11 +47,6 @@ public class MorphFilter : MonoBehaviour
 
     #region Public Methods
 
-    public void Test()
-    {
-        m_morph.Test();
-    }
-
     /// <summary>
     /// Use the data in the provided mesh filters to generate a new mesh and store it in the 
     /// attached mesh filter.
@@ -70,8 +65,7 @@ public class MorphFilter : MonoBehaviour
         // generate the morph from the source mesh filters
         m_morph = new Morph(m_sourceMeshFilters);
 
-        // set the target mesh filter to the newly generated mesh
-        m_targetMeshFilter.sharedMesh = m_morph.ToMesh();
+        Refresh();
 
         // deactivate the source mesh filter gameobjects
         for (int i = 0; i < m_sourceMeshFilters.Length; i++)
@@ -83,6 +77,15 @@ public class MorphFilter : MonoBehaviour
 
         if (!materials.IsNullOrEmpty())
             m_targetMeshRenderer.sharedMaterials = materials;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    public void Refresh()
+    {
+        // set the target mesh filter to the newly generated mesh
+        m_targetMeshFilter.sharedMesh = m_morph.ToMesh();
     }
 
     /// <summary>
