@@ -612,14 +612,7 @@ namespace Simplex
                 point.SetID(m_highestPointIndex++);
                 m_pointsByID.Add(point.ID, point);
             }
-
-            int locationID = point.GetLocationID();
-
-            //if (!m_pointsByLocation.TryGetValue(locationID, out HashSet<int> points))
-            //    m_pointsByLocation.Add(locationID, new HashSet<int>() { point.ID });
-            //else
-            //    points.Add(point.ID);
-
+            
             // make a note of any points which share a vertex (for pathing)
             ConnectPointsInSameLocation(point);
         }
