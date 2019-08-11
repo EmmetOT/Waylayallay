@@ -13,6 +13,20 @@ namespace Simplex
         #region Colours
 
         /// <summary>
+        /// Returns a colour generated from the given object's hash code.
+        /// </summary>
+        public static Color HashToColour(this object obj)
+        {
+            int colourHex = Mathf.Abs(obj.GetHashCode()) % 0xFFFFFF;
+
+            float b = colourHex % 0x100 / 255f;
+            float g = ((colourHex % 0x10000) - b) / 0x100 / 255f;
+            float r = ((colourHex % 0x1000000) - g) / 0x10000 / 255f;
+
+            return new Color(r, g, b, 0.3f);
+        }
+
+        /// <summary>
         /// Sets the alpha value of this colour.
         /// </summary>
         public static Color SetAlpha(this Color color, float alpha)

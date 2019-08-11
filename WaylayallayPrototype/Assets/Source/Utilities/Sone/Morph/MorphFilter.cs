@@ -5,6 +5,7 @@ using Simplex;
 using NaughtyAttributes;
 using UnityEditor;
 using System;
+using System.Linq;
 
 /// <summary>
 /// This component is the Morph 'equivalent' of a MeshFilter.
@@ -18,8 +19,10 @@ public class MorphFilter : MonoBehaviour
     [SerializeField]
     private MeshFilter[] m_sourceMeshFilters;
 
+    [SerializeField, HideInInspector]
     private MeshFilter m_targetMeshFilter;
 
+    [SerializeField, HideInInspector]
     private Renderer m_targetMeshRenderer;
 
     [SerializeField]
@@ -44,20 +47,25 @@ public class MorphFilter : MonoBehaviour
 
     #region Public Methods
 
+    public void Test()
+    {
+        m_morph.Test();
+    }
+
     /// <summary>
     /// Use the data in the provided mesh filters to generate a new mesh and store it in the 
     /// attached mesh filter.
     /// </summary>
     public void GenerateMorph()
     {
-        Debug.Log("Generate Morph");
-
         if (m_sourceMeshFilters.IsNullOrEmpty())
         {
             m_targetMeshFilter.sharedMesh = null;
             m_morph = null;
             return;
         }
+
+        m_sourceMeshFilters = m_sourceMeshFilters.Distinct().ToArray();
 
         // generate the morph from the source mesh filters
         m_morph = new Morph(m_sourceMeshFilters);
@@ -82,7 +90,7 @@ public class MorphFilter : MonoBehaviour
     /// </summary>
     public Vector3 GetPoint(int i)
     {
-        Morph.Point point = m_morph.GetPoint(i);
+        Point point = m_morph.GetPoint(i);
         return point == null ? default : point.LocalPosition;
     }
 
@@ -102,12 +110,12 @@ public class MorphFilter : MonoBehaviour
     /// If the given point exists in the morph, set it to the new position, as
     /// well as any of its colocated chums, and regenerate the mesh.
     /// </summary>
-    public void SetPointAndRegenerateMesh(Morph.Point point, Vector3 vec)
+    public void SetPointAndRegenerateMesh(Point point, Vector3 vec)
     {
         m_morph.SetPoint(point, vec);
 
         // set the target mesh filter to the newly generated mesh
-        m_targetMeshFilter.sharedMesh = m_morph.ToMesh();
+        m_targetMeshFilter.sharedMesh = m_morph.ToMesh();//
     }
 
     #endregion

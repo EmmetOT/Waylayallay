@@ -9,8 +9,6 @@ public class MorphFilterEditor : Editor
 {
     public override void OnInspectorGUI()
     {
-        base.OnInspectorGUI();
-
         MorphFilter morphFilter = (MorphFilter)target;
 
         SerializedProperty meshesProperty = serializedObject.FindProperty("m_sourceMeshFilters");
@@ -28,13 +26,12 @@ public class MorphFilterEditor : Editor
 
         if (GUILayout.Button("Regenerate"))
         {
-            morphFilter.GenerateMorph();//
+            morphFilter.GenerateMorph();
         }
-
 
         if (GUILayout.Button("Test"))
         {
-            morphFilter.Morph.Test();
+            morphFilter.Test();
         }
     }
 
@@ -51,7 +48,7 @@ public class MorphFilterEditor : Editor
         Matrix4x4 originalHandlesMatrix = Handles.matrix;
         Handles.matrix = morphFilterTransform.localToWorldMatrix;
 
-        foreach (Morph.Point point in morphFilter.Morph.Points)
+        foreach (Point point in morphFilter.Morph.Points)
         {
             Vector3 pos = morphFilterTransform.localToWorldMatrix * point.LocalPosition;
 
@@ -67,7 +64,7 @@ public class MorphFilterEditor : Editor
         Handles.matrix = originalHandlesMatrix;
     }
 
-    [DrawGizmo(GizmoType.Selected)]
+    [DrawGizmo(GizmoType.Selected | GizmoType.Active | GizmoType.NotInSelectionHierarchy)]
     private static void DrawGizmos(MorphFilter morphFilter, GizmoType gizmoType)
     {
         if (morphFilter == null || morphFilter.Morph == null || morphFilter.Morph.PointCount == 0)
@@ -77,6 +74,6 @@ public class MorphFilterEditor : Editor
 
         morphFilter.Morph.DrawFaces(morphFilterTransform, label: true);
         morphFilter.Morph.DrawTriangles(morphFilterTransform, label: true);
-        morphFilter.Morph.DrawPoints(morphFilterTransform);
+        //morphFilter.Morph.DrawPoints(morphFilterTransform);
     }
 }
